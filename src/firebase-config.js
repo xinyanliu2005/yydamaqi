@@ -4,10 +4,11 @@
    （见仓库根目录 firestore.rules）决定，不是靠隐藏这份配置。
    把下面的占位符换成你自己项目的真实值即可。 */
 export var firebaseConfig = {
-  apiKey: "REPLACE_ME",
-  authDomain: "REPLACE_ME.firebaseapp.com",
-  projectId: "REPLACE_ME",
-  storageBucket: "REPLACE_ME.appspot.com",
-  messagingSenderId: "REPLACE_ME",
-  appId: "REPLACE_ME"
+  apiKey: "AIzaSyCx5UrTbnHNiDSiafBDFAhslSzD2f19UuA",
+  authDomain: "matidadada-b7547.firebaseapp.com",
+  projectId: "matidadada-b7547",
+  storageBucket: "matidadada-b7547.firebasestorage.app",
+  messagingSenderId: "439252333303",
+  appId: "1:439252333303:web:e4d7fd5f4d799f0f1759f2",
+  measurementId: "G-B2KPFC8D5L"
 };

@@ -1,0 +1,74 @@
+/* ===================== 游戏规则用的辅助函数 ===================== */
+/* 这些函数操作房间状态（data / player），供 mutators.js 里的各个 mutXxx 组合使用。 */
+
+import { CARDS } from './data.js';
+import { uid, shuffle } from './utils.js';
+
+export function findPlayer(data,id){ for(var i=0;i<data.players.length;i++) if(data.players[i].id===id) return data.players[i]; return null; }
+export function nameOf(data,id){ var p=findPlayer(data,id); return p? p.name : '?'; }
+export function isCurrentTurn(data,id){ return data.status==='playing' && data.turnOrder[data.turnIndex]===id; }
+export function sumBuff(p,type){ return p.buffs.filter(function(b){return b.type===type && b.turnsLeft>0;}).reduce(function(s,b){return s+b.value;},0); }
+
+/* 叠加同一来源的buff时，不再把数值相加，而是把持续回合数相加——
+   比如阴阳迷踪步用两次，不会变成 +10 步，而是维持 +5 步、持续时间变成 2+2=4 回合。
+   "同一来源"用 source 字段判断（例如 'card:yinyang'、'skill:zuihuayin'），
+   因为同一张卡/同一个技能每次触发的数值本来就是固定的。 */
+export function addBuff(p,type,value,turns,source,label){
+  var existing=null;
+  for(var i=0;i<p.buffs.length;i++){
+    if(p.buffs[i].source===source && p.buffs[i].turnsLeft>0){ existing=p.buffs[i]; break; }
+  }
+  if(existing){
+    existing.turnsLeft += turns;
+  } else {
+    p.buffs.push({id:uid(), type:type, value:value, turnsLeft:turns, source:source, label:label});
+  }
+}
+
+export function tickBuffs(p){
+  p.buffs = p.buffs.map(function(b){ return Object.assign({},b,{turnsLeft:b.turnsLeft-1}); }).filter(function(b){ return b.turnsLeft>0; });
+}
+
+export function pushLog(log,text){
+  var l=log.slice();
+  l.push({ts:Date.now(), text:text});
+  return l.slice(-40);
+}
+
+export function drawCard(){
+  var keys=Object.keys(CARDS);
+  var k=keys[Math.floor(Math.random()*keys.length)];
+  return {uid:uid(), key:k};
+}
+
+/* 商店每一页 5 张卡牌互不重复——先洗牌整个卡牌池，再取前 5 张。 */
+export function genStoreOffer(){
+  return shuffle(Object.keys(CARDS)).slice(0,5);
+}
+
+export function newPlayer(id,name,hero){
+  return {
+    id:id, name:name, hero:hero, money:0, position:0, hand:[], buffs:[], skillCooldown:0,
+    storeOffer:genStoreOffer(), storeRefreshCount:0,
+    joinedAt:Date.now()
+  };
+}
+
+/* 每一"轮"（round）开始时，场上所有玩家同时获得的资源——不是等到某个人的回合才发，
+   而是这一轮刚开始（游戏开局，或上一轮所有人都走完一遍）就一次性发给每个人。 */
+export function grantRoundResources(data, playerId){
+  var p=findPlayer(data,playerId);
+  if(!p) return;
+  p.money += 30;
+  p.hand.push(drawCard());
+  p.hand.push(drawCard());
+}
+
+/* 轮到"这名玩家自己的回合"时才结算的个人状态——技能冷却递减、商店刷新次数重置。
+   这些是跟着"这名玩家的回合"走的，跟上面按"轮"批量发放的资源是两回事。 */
+export function grantTurnStart(data, playerId){
+  var p=findPlayer(data,playerId);
+  if(!p) return;
+  if(p.skillCooldown>0) p.skillCooldown -= 1;
+  p.storeRefreshCount = 0; /* 新回合开始，本回合第一次"换一批"重新变为免费 */
+}

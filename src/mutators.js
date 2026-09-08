@@ -162,6 +162,21 @@ export function mutKick(data, requesterId, targetId){
   return {data:data};
 }
 
+/* 天泉开局福利：只在游戏刚开始的这一刻发生一次（不是每轮都有）。场上每一个
+   天泉玩家都会给所有"其他玩家"（哪怕对方也是天泉）+40元，自己额外+90元。
+   多个天泉会互相叠加——两个天泉的话，彼此都会从对方那里再拿到一份+40，
+   普通玩家则会拿到两份+40。 */
+function applyTianquanStartingBonus(data){
+  var tianquans = data.players.filter(function(p){ return p.hero==='tianquan'; });
+  tianquans.forEach(function(tq){
+    data.players.forEach(function(p){
+      if(p.id!==tq.id) p.money += 40;
+    });
+    tq.money += 90;
+    data.log = pushLog(data.log, '天泉 '+tq.name+' 开局慷慨解囊：其他玩家各获得40元，自己额外获得90元');
+  });
+}
+
 export function mutStart(data, requesterId){
   if(data.hostId!==requesterId) return {error:'只有房主可以开始游戏'};
   if(data.status!=='lobby') return {error:'游戏已经开始'};
@@ -180,6 +195,7 @@ export function mutStart(data, requesterId){
     var pl = findPlayer(data, pid);
     pl.storeOffer = genStoreOffer(data.round, false); /* 第1轮不可能有人已到80% */
   });
+  applyTianquanStartingBonus(data);
   grantTurnStart(data, order[0]);
   data.log = pushLog(data.log, '游戏开始！骰子决定顺序，'+nameOf(data,order[0])+' 先手；本轮所有玩家已同时获得资源');
   return {data:data};

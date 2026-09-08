@@ -1,31 +1,44 @@
-# 凌云棋局 · 飞行棋网页版
+# 马蹄哒哒哒（原"凌云棋局"）· 飞行棋网页版
 
 一个 2–4 人在线飞行棋，支持英雄技能和卡牌对战。[index.html](index.html) + [src/](src/) 是真正
 运行的多文件源码（浏览器原生 ES module，不需要打包/构建步骤），部署在 Netlify 上，任何人拿到
-链接都能直接玩，不需要登录任何账号。跨设备的共享房间状态同步用 Firebase Firestore
-（见 [src/firebase-db.js](src/firebase-db.js)）。
+链接都能直接玩，不需要登录任何账号。跨设备的共享房间状态同步用腾讯云开发 CloudBase
+（见 [src/cloudbase-db.js](src/cloudbase-db.js)）。
 
 > 这个项目最早是作为 Claude Artifact 发布的（单文件、通过 Claude 的 `db` 运行时能力同步状态），
-> 后来因为 Artifact 的分享权限被限制、朋友打不开链接，迁移到了"自己控制的 Firebase + Netlify"
-> 这一套——不再依赖 Claude 账号或 Artifact 平台。
+> 后来因为 Artifact 的分享权限被限制、朋友打不开链接，迁移到了 Netlify 静态托管；一开始用的是
+> Firebase Firestore，但 Firebase 是 Google 的基础设施，中国大陆用户不开 VPN 完全连不上，于是
+> 又换成了腾讯云开发 CloudBase——不再依赖 Claude 账号、Artifact 平台，也不再依赖需要翻墙的服务。
 
 ## 部署前需要做的事
 
-**1. Firebase 项目**（共享房间状态存在这里）：
-1. https://console.firebase.google.com → 新建项目（免费额度够用）。
-2. Build → Firestore Database → 创建数据库。
-3. 项目设置（齿轮图标）→ 你的应用 → 添加应用 → Web（`</>`）→ 注册后复制它给你的 `firebaseConfig` 对象。
-4. 把这个对象填进 [src/firebase-config.js](src/firebase-config.js)，替换掉里面的 `REPLACE_ME` 占位符。
-   这些值不是密钥，可以放心提交到仓库里——真正的访问控制在下一步的安全规则。
-5. 把仓库根目录 [firestore.rules](firestore.rules) 的内容贴到 Firebase 控制台的
-   Firestore → 规则 页面（**记得替换掉默认的"测试模式"规则**——测试模式30天后会自动过期变成
-   拒绝所有读写，届时房间会突然全部连不上）。
+**1. CloudBase 环境**（共享房间状态存在这里）：
+1. https://console.cloud.tencent.com/tcb → 新建环境（免费额度够用）。
+2. 左侧「数据库」→ 新建一个集合，名字必须叫 `games`（代码里写死了这个集合名）。
+3. 左侧「登录授权」→ 开启「匿名登录」（这个游戏没有账号系统，靠一个匿名身份满足数据库安全
+   规则里"必须是登录状态"的要求）。
+4. 数据库 → `games` 集合的权限设置里，把内容换成仓库根目录 [cloudbase.rules.json](cloudbase.rules.json)
+   （只允许读，不允许写——所有写操作都通过下面的云函数完成，客户端不直接写数据库）。
+5. 环境 ID 就在控制台环境列表/概览页能看到（形如 `xxx-yyy` 或者干脆是环境名本身），把它填进
+   [src/cloudbase-config.js](src/cloudbase-config.js) 的 `CLOUDBASE_ENV_ID`，替换掉 `REPLACE_ME`。
+   这个 ID 不是密钥，可以放心提交到仓库里。
 
-**2. 部署到 Netlify**：这是纯静态站点，没有构建步骤。
+**2. 部署云函数**（负责真正的读写，用到数据库事务，只有服务端能做）：
+1. 跑一次 `node scripts/build-cloud-function.js`，把 `src/` 里的游戏规则打包进
+   `cloudfunctions/applyGameAction/game-logic-bundle.js`。
+2. CloudBase 控制台 → 云函数 → 新建函数，名字必须叫 `applyGameAction`（代码里写死了这个名字）。
+3. 把 `cloudfunctions/applyGameAction/` 整个目录的内容上传/粘贴进去（`index.js` +
+   `game-logic-bundle.js` + `package.json`），运行环境选 Node.js。
+4. 安装依赖（控制台一般有"安装依赖"按钮读取 `package.json`；如果没有，本地在这个目录跑
+   `npm install` 后把连 `node_modules` 一起打包上传）。
+5. 部署。**以后每次改了 `src/` 里的游戏规则，都要重新跑一次上面的打包脚本、重新上传这个云函数**
+   ——它不会跟着 Netlify 的自动部署一起更新，是完全独立的一份代码。
+
+**3. 部署到 Netlify**：这是纯静态站点，没有构建步骤。
 - 如果通过 Git 连接：app.netlify.com → Add new site → Import an existing project →
   选这个仓库 → Publish directory 填 `.`（仓库根目录），Build command 留空。
 - 仓库里的 [netlify.toml](netlify.toml) 已经写好了这两项，Netlify 通常会自动识别。
-- 之后每次 push 到关联的分支，Netlify 会自动重新部署。
+- 之后每次 push 到关联的分支，Netlify 会自动重新部署（但云函数不会，见上一步）。
 
 ## 当前玩法规则（已实现）
 
@@ -101,17 +114,28 @@
 | [src/data.js](src/data.js) | `HEROES` / `CARDS` / `PLAYER_COLORS` / `WIN_POS` / `STORE_REFRESH_PRICES` 静态数据表。加新英雄/卡牌从这里加一条即可，逻辑代码不用大改。 |
 | [src/utils.js](src/utils.js) | 与游戏规则无关的通用工具函数（uid、洗牌、生成房间号、HTML 转义…）。 |
 | [src/game-logic.js](src/game-logic.js) | 游戏规则用的辅助函数：查玩家、判断当前回合、buff 增删/叠加/递减、发牌、每回合开始的结算等。 |
-| [src/mutators.js](src/mutators.js) | **mutator 函数**（`mutJoin` / `mutStart` / `mutUseSkill` / `mutPlayCard` / `mutBuyCard` / `mutRefreshStore` / `mutRoll` / `mutEndTurn` 等）——纯函数，输入当前房间状态、输出新状态或报错，是游戏规则真正跑的地方。加新效果基本就是在这几个函数里加分支。 |
+| [src/mutators.js](src/mutators.js) | **mutator 函数**（`mutJoin` / `mutStart` / `mutUseSkill` / `mutPlayCard` / `mutBuyCard` / `mutRefreshStore` / `mutRoll` / `mutEndTurn` 等）——纯函数，输入当前房间状态、输出新状态或报错，是游戏规则真正跑的地方。加新效果基本就是在这几个函数里加分支。**这几个文件（data/utils/game-logic/mutators）不依赖浏览器 API，同时也被云函数复用**（见下面的 cloudfunctions）。 |
 | [src/app-state.js](src/app-state.js) | 运行时可变状态（是否已连上共享存储、我的身份、当前房间号、UI 状态）放在一个共享 `runtime` 对象里，供 app.js 和 render.js 一起读写。 |
 | [src/render.js](src/render.js) | 所有渲染函数——纯字符串拼 HTML 再整体替换，没有用框架。 |
-| [src/app.js](src/app.js) | 入口：房间创建/加入/订阅（调用 firebase-db.js）、事件委托、启动逻辑。 |
-| [src/firebase-config.js](src/firebase-config.js) | 你自己 Firebase 项目的 Web 配置——部署前必须把占位符换成真实值。 |
-| [src/firebase-db.js](src/firebase-db.js) | Firestore 读写封装：`getGame` / `setGame` / `subscribeGame` / `runGameTransaction`（用 Firestore 事务实现乐观锁，取代了以前手写的 acquire+重试逻辑）。 |
+| [src/app.js](src/app.js) | 入口：房间创建/加入/订阅、事件委托、启动逻辑。所有会改动房间状态的操作都只是把"用哪个 mutator、传什么参数"转发给云函数，不在浏览器里直接跑 mutator。 |
+| [src/cloudbase-config.js](src/cloudbase-config.js) | 你自己 CloudBase 环境的 ID——部署前必须把占位符换成真实值。 |
+| [src/cloudbase-db.js](src/cloudbase-db.js) | 浏览器这一侧的数据库封装：`getGame` / `subscribeGame`（直接读/监听数据库，不需要经过云函数）、`runGameTransaction` / `createRoom`（转发给云函数 `applyGameAction`）。 |
 | [src/style.css](src/style.css) | 全部样式，`index.html` 用 `<link>` 直接引用。 |
+| [cloudfunctions/applyGameAction/](cloudfunctions/applyGameAction/) | 云函数：真正执行"读最新房间状态 → 跑 mutator → 写回"的地方，用数据库事务保证原子性（CloudBase 的浏览器端 SDK 不支持事务，只有这里——服务端 node-sdk——才支持）。`game-logic-bundle.js` 是自动生成的，不要手改，见下面的打包脚本。 |
+| [scripts/build-cloud-function.js](scripts/build-cloud-function.js) | 把 `src/{data,utils,game-logic,mutators}.js` 打包成 `cloudfunctions/applyGameAction/game-logic-bundle.js`（CommonJS，供云函数 `require()`）。改了游戏规则之后要跑这个脚本，再重新部署云函数。 |
 
 ## 如何开发 / 更新线上版本
 
-改 `src/` 下对应模块的代码，直接用浏览器打开（需要经过一个静态服务器，比如 `npx serve`——
-ES module 走 `file://` 协议在部分浏览器里会被 CORS 拦住）验证没问题后提交、push，Netlify
-会自动重新部署。**没有构建步骤**——`index.html` 和 `src/*.js` 就是线上跑的代码本身，改完
-就是改完，不需要额外的打包/生成动作。
+**改前端/UI/游戏规则**（`src/` 下任意文件）：直接用浏览器打开（需要经过一个静态服务器，比如
+`npx serve`——ES module 走 `file://` 协议在部分浏览器里会被 CORS 拦住）验证没问题后提交、push，
+Netlify 会自动重新部署。**这部分没有构建步骤**——`index.html` 和 `src/*.js` 就是线上跑的代码
+本身，改完就是改完。
+
+**如果改的是游戏规则**（`src/data.js` / `src/mutators.js` / `src/game-logic.js` / `src/utils.js`
+任意一个）：因为云函数用的是这几个文件打包出来的一份独立拷贝，还需要额外两步——
+1. `node scripts/build-cloud-function.js` 重新生成 `cloudfunctions/applyGameAction/game-logic-bundle.js`。
+2. 把 `cloudfunctions/applyGameAction/` 整个目录重新上传/部署到 CloudBase 控制台的云函数
+   `applyGameAction`。
+
+漏了这一步的话，前端显示的卡牌描述之类的文字会更新，但云函数里跑的判定逻辑还是旧的——两边会
+不一致。

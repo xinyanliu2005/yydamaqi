@@ -8,6 +8,9 @@
 </head>
 <body>
 <div id="app"></div>
+<!-- CloudBase 的浏览器 SDK 是 UMD 构建，挂到全局变量 window.cloudbase 上，
+     不是 ES module，所以用普通 <script> 标签、且必须排在下面的模块脚本前面。 -->
+<script src="https://static.cloudbase.net/cloudbase-js-sdk/3.9.2/cloudbase.full.js"></script>
 <script type="module" src="src/app.js"></script>
 </body>
 </html>

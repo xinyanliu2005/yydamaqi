@@ -291,7 +291,7 @@ export function render(app){
   if(!runtime.db){
     app.innerHTML =
       '<div class="topline"><h1 class="brush">凌云棋局</h1><div class="tag">Airplane Chess · 英雄卡牌对战</div></div>'+
-      '<div class="center-msg">多人对战功能尚未配置：请先在 <code>src/firebase-config.js</code> 里填入你自己 Firebase 项目的配置（Firebase 控制台 → 项目设置 → 你的 Web 应用），然后重新部署。</div>';
+      '<div class="center-msg">多人对战功能尚未配置：请先在 <code>src/cloudbase-config.js</code> 里填入你自己 CloudBase 环境的 ID（CloudBase 控制台 → 环境 ID），然后重新部署。</div>';
     return;
   }
   if(!runtime.myRoom || !runtime.game){ renderHome(app); return; }

@@ -139,22 +139,9 @@ app.addEventListener('click', function(e){
   }
 
   if(action==='use-skill'){
-    var me=findPlayer(game, myId);
-    if(!me) return;
-    if(me.hero==='zuihuayin'){
-      var opponents=game.players.filter(function(p){ return p.id!==myId; });
-      if(opponents.length===0) return;
-      if(opponents.length===1){
-        runAction(function(){ return withGameLock(myRoom, function(data){ return mutUseSkill(data,myId,opponents[0].id); }); });
-      } else {
-        ui.pendingTarget={ kind:'skill', title:'花醉三千 · 选择目标', confirmAction:function(tid){
-          return withGameLock(myRoom, function(data){ return mutUseSkill(data,myId,tid); });
-        }};
-        draw();
-      }
-    } else {
-      runAction(function(){ return withGameLock(myRoom, function(data){ return mutUseSkill(data,myId,null); }); });
-    }
+    /* 现在所有英雄的主动技能都不需要挑目标——花醉三千已经改成对所有其他玩家
+       生效，其余英雄本来就是自动选目标（领先者/全场AoE/自己）或没有目标。 */
+    runAction(function(){ return withGameLock(myRoom, function(data){ return mutUseSkill(data,myId,null); }); });
     return;
   }
 

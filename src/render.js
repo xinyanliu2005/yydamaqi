@@ -2,7 +2,7 @@
 /* 纯字符串拼 HTML 再整体替换，没有用框架。这里的函数只读 app.js 里的运行时状态
    （db / myRoom / game / myId / ui），不直接修改它们（除了 renderHome 里给输入框绑事件）。 */
 
-import { HEROES, CARDS, PLAYER_COLORS, WIN_POS, STORE_REFRESH_PRICES } from './data.js';
+import { HEROES, CARDS, PLAYER_COLORS, WIN_POS, STORE_REFRESH_PRICES, SELL_PRICE_FOR_30, SELL_PRICE_DEFAULT } from './data.js';
 import { esc } from './utils.js';
 import { findPlayer, isCurrentTurn } from './game-logic.js';
 import { runtime, paramRoom } from './app-state.js';
@@ -78,7 +78,7 @@ export function storePanelHtml(me){
   }).join('');
   html+='</div>';
   html+='<button class="btn btn-small" data-action="refresh-store" style="margin-top:12px"'+(canRefresh?'':' disabled')+'>换一批'+(cost>0?('（'+cost+'元）'):'（本回合首次免费）')+'</button>';
-  html+='<div class="footnote">这一页的5张卡牌互不重复；买下的卡牌会立刻放进你的口袋（手牌），并从这一页下架（换一批之后可能重新出现）。不喜欢的卡牌也可以在手牌里卖出，固定获得5元。"换一批"在你本回合开始时第1次免费，第2次5元，之后每次10元。</div>';
+  html+='<div class="footnote">这一页的5张卡牌互不重复；买下的卡牌会立刻放进你的口袋（手牌），并从这一页下架（换一批之后可能重新出现）。不喜欢的卡牌也可以在手牌里卖出，商店价30元的卡卖'+SELL_PRICE_FOR_30+'元，其余卡卖'+SELL_PRICE_DEFAULT+'元。"换一批"在你本回合开始时第1次免费，第2次5元，之后每次10元。</div>';
   html+='</div>';
   return html;
 }
@@ -172,6 +172,12 @@ export function renderGame(app){
     '<button class="btn btn-small" data-action="toggle-tab">'+(storeMode?'返回牌局':'🛒 商店')+'</button> &nbsp;'+
     '<button class="btn btn-small" data-action="leave">离开房间</button></div></div>';
 
+  /* 横幅播报：只显示最新一条日志（掷骰子结算、打出卡牌、使用技能、跳过回合、
+     里程碑…），商店的买/卖/换一批完全不会出现在这里——那些不写进 data.log
+     （见 mutators.js），别人看不到你商店里做了什么。 */
+  var lastLog = game.log && game.log.length ? game.log[game.log.length-1] : null;
+  html+='<div class="broadcast-banner">'+(lastLog?esc(lastLog.text):'欢迎来到凌云棋局，祝各位玩得开心')+'</div>';
+
   /* 左侧：棋盘 + 骰子 + 规则，或者商店 */
   html+='<div class="board-area">';
   if(storeMode){
@@ -196,12 +202,13 @@ export function renderGame(app){
     html+='<details class="rules"><summary>规则说明</summary>'+
       '<div class="rsec"><b>目标</b>：率先到达第40格获胜。</div>'+
       '<div class="rsec"><b>每一轮开始</b>：所有玩家同时免费获得 30 元和 2 张随机卡牌，直接放进各自口袋，不用花钱（开局是第1轮；之后每当轮完一圈、回到最先手的玩家时，就开始新的一轮，再同时发一次）。</div>'+
-      '<div class="rsec"><b>商店</b>：随时可以打开商店，里面随机上架 5 张互不重复的卡牌，花钱买下放进口袋；买过的卡牌会从这一页下架（刷新后可能重新出现）。口袋里不想要的卡牌也可以随时卖出，固定获得 5 元。"换一批"在你本回合开始时第1次免费，第2次5元，之后每次10元。</div>'+
+      '<div class="rsec"><b>商店</b>：随时可以打开商店，里面随机上架 5 张互不重复的卡牌，花钱买下放进口袋；买过的卡牌会从这一页下架（刷新后可能重新出现）。口袋里不想要的卡牌也可以随时卖出，商店价30元的卡卖'+SELL_PRICE_FOR_30+'元，其余卡卖'+SELL_PRICE_DEFAULT+'元。"换一批"在你本回合开始时第1次免费，第2次5元，之后每次10元。商店里能抽到什么卡是分阶段的：开局前2轮以基础卡/被动卡为主，奇袭类很少见；第3轮起干扰/进攻类卡牌变多；一旦场上有人率先冲到全程80%，其他玩家抽到奇袭卡的概率会提高。</div>'+
       '<div class="rsec"><b>回合流程</b>：可先使用技能 / 打出口袋里的卡牌，再掷骰子结算步数（掷骰子之后仍然可以继续打卡牌，只是不能再用技能），最后结束回合——即使还没掷骰子，也可以直接结束回合放弃本回合的移动。</div>'+
       '<div class="rsec"><b>技能冷却</b>：主动技能用一次后默认冷却2回合——本回合用过，下一次轮到自己不能用，再下一次轮到自己才能再用（文津馆的冷却只有1回合，狂澜的冷却取决于本次是否真正命中，见各自说明）。</div>'+
       '<div class="rsec"><b>叠加同一效果</b>：如果同一张卡/同一个技能的效果已经在身上生效，再次使用不会把数值继续叠加，而是把持续回合数相加（比如阴阳迷踪步用两次仍是 +5 步，但持续时间变成4回合）。</div>'+
-      '<div class="rsec"><b>天泉</b>——主动·千金取义：花20元获得2张随机卡牌；被动：非自己回合内失去钱，获得（失去金额÷3）步数增益。</div>'+
-      '<div class="rsec"><b>醉花阴</b>——主动·花醉三千：使目标玩家 -3 步，持续2回合；被动：场上有敌人带减益时，自己 +3 步。</div>'+
+      '<div class="rsec"><b>横幅播报</b>：屏幕顶部会显示最新一条对局动态（谁使用了什么技能/卡牌、谁掷出了几步）；商店里的买/卖/换一批不会公开，只有你自己看得到。</div>'+
+      '<div class="rsec"><b>天泉</b>——主动·千金取义：花20元获得2张随机卡牌；被动：非自己回合内失去钱，获得（失去金额÷3）步数增益（目前由"梁上君子"触发）。</div>'+
+      '<div class="rsec"><b>醉花阴</b>——主动·花醉三千：对场上所有其他玩家施加 -3 步减益，持续2回合；被动：场上有敌人带减益时，自己 +3 步。</div>'+
       '<div class="rsec"><b>孤云</b>——主动·大道无为（冷却2回合）：朝场上（除自己以外）最靠近终点的玩家靠近——相距≤6格则直接到达对方所在格，否则朝对方方向移动6格；如果自己已经是全场第一，则会转而朝落后自己最多的那名对手移动，方向可能是往回走。移动后立刻获得一张凌虚一指；被动：落后领先者3-4格+2步，5-9格+5步，10格以上+7步。</div>'+
       '<div class="rsec"><b>文津馆</b>——主动·运筹帷幄（冷却1回合，相当于每轮到自己都能用）：投两次骰子取较大值作为本回合点数；被动：本回合移动越过了某名玩家的位置，可以再掷一次骰子，只要还在越过别人就能连续触发。</div>'+
       '<div class="rsec"><b>狂澜</b>——主动·军威赫赫：对前后6格内所有玩家发起奇袭（可被无相金身格挡、保护状态免疫），被扫到的玩家无论是否命中都会随机失去自身一项效果；若无人被真正命中，下回合仍可再用，命中则2回合冷却并前进6格；被动：每次使用主动技能，自己 +3 步（用于紧接着的下一次掷骰子）。</div>'+
@@ -215,6 +222,7 @@ export function renderGame(app){
       '<div class="rsec"><b>凌云踏</b>（商店价15元）：立即向前跳3/4/5/6格（自选），与本回合骰子移动叠加。</div>'+
       '<div class="rsec"><b>飒沓流星</b>（商店价30元，被动）：留在口袋里时，自己每一次成功命中的奇袭（不含被格挡/被保护免疫的）都额外前进6格。&nbsp; <b>聚宝盆</b>（商店价30元，被动）：留在口袋里时，自己金钱超过30元+2步，超过80元改为+4步（不叠加，取最高档）。</div>'+
       '<div class="rsec"><b>叨叨不叨叨</b>（商店价15元）：销毁一名玩家手牌中随机1张卡牌，对方没有任何补偿。&nbsp; <b>狮吼正声</b>（商店价30元，奇袭）：无视距离，直接对当前排名第一的玩家（自己是第一则改打第二名）发起奇袭，命中后目标跳过下一回合并倒退5格；同样可被无相金身格挡、对保护状态中的玩家无效。</div>'+
+      '<div class="rsec"><b>敲山震虎</b>（商店价20元，奇袭）：无视距离，锁定当前排名第一的玩家（自己是第一则改打第二名），使其跳过下一回合；同样可被无相金身格挡、对保护状态中的玩家无效。只有在场上有玩家率先冲到全程80%之后，商店才会上架这张卡。</div>'+
     '</details>';
     html+='</div>';
   }
@@ -246,19 +254,17 @@ export function renderGame(app){
     html+=me.hand.map(function(c){
       var cd=CARDS[c.key];
       var canUse = myTurn && game.status==='playing';
+      var sellPrice = cd.price===30 ? SELL_PRICE_FOR_30 : SELL_PRICE_DEFAULT;
       return '<div class="hand-card"><div class="cname">'+cd.name+(cd.passive?' <span style="font-size:.62rem;color:var(--ivory-dim);font-weight:400">（被动·留在口袋里生效）</span>':'')+'</div><div class="cdesc">'+cd.desc+'</div>'+
         '<div class="cfoot"><span class="price-tag">商店价 '+cd.price+' 元</span>'+
         '<div style="display:flex;gap:6px">'+
-          '<button class="btn btn-small" data-action="sell-card" data-uid="'+c.uid+'">卖出 +5</button>'+
+          '<button class="btn btn-small" data-action="sell-card" data-uid="'+c.uid+'">卖出 +'+sellPrice+'</button>'+
           (cd.passive ? '' : '<button class="btn btn-small btn-gold" data-action="play-card" data-uid="'+c.uid+'" data-key="'+c.key+'"'+(canUse?'':' disabled')+'>使用</button>')+
         '</div></div></div>';
     }).join('');
     html+='</div></div>';
   }
 
-  html+='<div class="card-panel"><div class="section-title">对局日志</div><div class="log-panel">'+
-    game.log.slice().reverse().map(function(l,i){ return '<div'+(i===0?' class="lg-new"':'')+'>'+esc(l.text)+'</div>'; }).join('')+
-  '</div></div>';
   html+='</div>'; // side-panel
 
   if(ui.error) html+='<div class="err-banner" style="grid-column:1/-1">'+esc(ui.error)+'</div>';

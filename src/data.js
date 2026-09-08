@@ -79,7 +79,11 @@ export var CARDS = {
     needsTarget:false, surpriseAttack:true },
   jubaopen: { key:'jubaopen', name:'聚宝盆', price:30,
     desc:'被动：只要留在口袋里，自己金钱超过30元时+2步，超过80元时改为+4步（两档不叠加，按最高档计算）',
-    needsTarget:false, passive:true }
+    needsTarget:false, passive:true },
+
+  qiaoshan: { key:'qiaoshan', name:'敲山震虎', price:20,
+    desc:'奇袭：无视距离，锁定当前排名第一的玩家（如果就是自己则改打第二名），使其跳过下一回合（若被「无相金身」格挡或对方处于保护状态，则完全无效）。只有在场上有玩家率先冲到全程80%之后，商店才会上架这张卡',
+    needsTarget:false, surpriseAttack:true }
 };
 
 export var PLAYER_COLORS = ['#c1452c','#c9a24b','#4d7eb0','#9a5cc0'];
@@ -88,3 +92,30 @@ export var WIN_POS = 40;
 /* 商店"换一批"的价格阶梯：本回合第 N 次刷新对应下标 N（从0开始），
    超出数组长度的次数一律用最后一档的价格。 */
 export var STORE_REFRESH_PRICES = [0, 5, 10];
+
+/* 卖出手牌卡片能拿回多少钱：商店价30元的卡（好兆骰/飒沓流星/狮吼正声/聚宝盆）
+   卖8元，其余卡固定卖5元。 */
+export var SELL_PRICE_FOR_30 = 8;
+export var SELL_PRICE_DEFAULT = 5;
+
+/* 全程达到这个比例（0.8 = 80%）时，触发"商店开始上架奇袭卡"的里程碑。 */
+export var MILESTONE_RATIO = 0.8;
+
+/* 商店卡牌权重表——按"游戏阶段"分两档基础权重：第1-2轮 vs 第3轮起。数值只是
+   相对比例，不是百分比。0 表示这个阶段完全不会出现在商店里。这里的具体数字
+   还在摸索阶段，后续会继续调整。 */
+export var STORE_WEIGHTS_EARLY = { /* 第1-2轮：新手卡 + 被动卡常见，奇袭类很少见 */
+  yinyang:8, shengcai:8, qingfeng:8, jinyu:8,
+  wuxiang:8, haozhao:8, sadaliuxing:8, jubaopen:8,
+  lingxu:1, lingyun:1,
+  daodao:0, shihou:0, shexing:0, liangshang:0, qiaoshan:0
+};
+export var STORE_WEIGHTS_MID = { /* 第3轮起：干扰/进攻类卡牌成为主流 */
+  lingxu:8, lingyun:8, daodao:8, shexing:8, liangshang:8,
+  yinyang:2, shengcai:2, qingfeng:2, jinyu:2,
+  wuxiang:2, haozhao:2, sadaliuxing:2, jubaopen:2,
+  shihou:0, qiaoshan:0
+};
+/* 达成80%里程碑后，"非率先冲刺者"抽卡时额外叠加的权重——奇袭类卡牌变得更常见，
+   给落后的玩家更多反打领先者的机会。 */
+export var MILESTONE_SURPRISE_ATTACK_BOOST = { lingxu:6, shihou:6, qiaoshan:6 };

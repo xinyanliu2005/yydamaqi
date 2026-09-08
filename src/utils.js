@@ -19,3 +19,21 @@ export function shuffle(arr){
 }
 
 export function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+/* 按权重、不放回地抽 count 个 key。weights 是 {key: 权重数字} 的形式，权重<=0
+   的 key 永远不会被抽到。商店卡牌概率就是靠这个函数实现的。 */
+export function weightedPickWithoutReplacement(weights, count){
+  var pool = Object.keys(weights)
+    .filter(function(k){ return weights[k]>0; })
+    .map(function(k){ return {key:k, w:weights[k]}; });
+  var result=[];
+  while(result.length<count && pool.length>0){
+    var total = pool.reduce(function(s,e){ return s+e.w; }, 0);
+    var r = Math.random()*total;
+    var acc=0, idx=pool.length-1;
+    for(var i=0;i<pool.length;i++){ acc+=pool[i].w; if(r<acc){ idx=i; break; } }
+    result.push(pool[idx].key);
+    pool.splice(idx,1);
+  }
+  return result;
+}

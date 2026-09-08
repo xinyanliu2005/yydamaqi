@@ -1,8 +1,8 @@
 /* ===================== 游戏规则用的辅助函数 ===================== */
 /* 这些函数操作房间状态（data / player），供 mutators.js 里的各个 mutXxx 组合使用。 */
 
-import { CARDS } from './data.js';
-import { uid, shuffle } from './utils.js';
+import { CARDS, STORE_WEIGHTS_EARLY, STORE_WEIGHTS_MID, MILESTONE_SURPRISE_ATTACK_BOOST } from './data.js';
+import { uid, weightedPickWithoutReplacement } from './utils.js';
 
 export function findPlayer(data,id){ for(var i=0;i<data.players.length;i++) if(data.players[i].id===id) return data.players[i]; return null; }
 export function nameOf(data,id){ var p=findPlayer(data,id); return p? p.name : '?'; }
@@ -41,15 +41,28 @@ export function drawCard(){
   return {uid:uid(), key:k};
 }
 
-/* 商店每一页 5 张卡牌互不重复——先洗牌整个卡牌池，再取前 5 张。 */
-export function genStoreOffer(){
-  return shuffle(Object.keys(CARDS)).slice(0,5);
+/* 商店每一页 5 张卡牌互不重复，按权重抽（见 data.js 里的 STORE_WEIGHTS_EARLY /
+   STORE_WEIGHTS_MID / MILESTONE_SURPRISE_ATTACK_BOOST）：
+   - round < 3：用"早期"权重表（新手卡+被动卡常见，奇袭类很少见，部分卡完全不会出现）
+   - round >= 3：用"中期"权重表（干扰/进攻类卡牌变多）
+   - milestoneBoost：true 表示"已经有玩家冲到全程80%，且当前抽卡的不是那个人"，
+     这时候在上面任一档权重的基础上，再给奇袭类卡牌加权重（可能让它们从0变成可抽到）。 */
+export function genStoreOffer(round, milestoneBoost){
+  var base = (round && round>=3) ? STORE_WEIGHTS_MID : STORE_WEIGHTS_EARLY;
+  var weights={};
+  Object.keys(CARDS).forEach(function(k){ weights[k] = base[k]!=null ? base[k] : 1; });
+  if(milestoneBoost){
+    Object.keys(MILESTONE_SURPRISE_ATTACK_BOOST).forEach(function(k){
+      weights[k] = (weights[k]||0) + MILESTONE_SURPRISE_ATTACK_BOOST[k];
+    });
+  }
+  return weightedPickWithoutReplacement(weights, 5);
 }
 
 export function newPlayer(id,name,hero){
   return {
     id:id, name:name, hero:hero, money:0, position:0, hand:[], buffs:[], skillCooldown:0,
-    storeOffer:genStoreOffer(), storeRefreshCount:0,
+    storeOffer:genStoreOffer(0,false), storeRefreshCount:0,
     joinedAt:Date.now()
   };
 }

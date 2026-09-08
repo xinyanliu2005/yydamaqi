@@ -2,7 +2,7 @@
 /* 每个 mutator 接收克隆后的 game 数据，返回 {data} 表示成功写回，或 {error} 表示失败（不写回）。
    加新效果基本就是在这几个函数里加分支。 */
 
-import { HEROES, CARDS, WIN_POS, STORE_REFRESH_PRICES } from './data.js';
+import { HEROES, CARDS, WIN_POS, STORE_REFRESH_PRICES, SELL_PRICE_FOR_30, SELL_PRICE_DEFAULT, MILESTONE_RATIO } from './data.js';
 import { shuffle, uid } from './utils.js';
 import {
   findPlayer, nameOf, isCurrentTurn, sumBuff, addBuff, tickBuffs,
@@ -20,6 +20,46 @@ function checkWinCondition(data, p){
     data.winner=p.id;
     data.log = pushLog(data.log, '🏆 '+p.name+' 抵达第40格终点，获得胜利！');
   }
+}
+
+/* 全场第一次有玩家抵达全程 80%（见 data.js 的 MILESTONE_RATIO）时记一下——
+   之后商店给"其他玩家"（不是率先冲线的这个人）上架奇袭卡的概率会提高，
+   见 game-logic.js 的 genStoreOffer。只记第一次，谁先到就是谁，不会被后来者
+   顶替，也不会因为掉出80%以下而撤销。 */
+function checkMilestone80(data, p){
+  if(!data.milestone80PlayerId && p.position >= Math.ceil(WIN_POS*MILESTONE_RATIO) && data.status==='playing'){
+    data.milestone80PlayerId = p.id;
+    data.log = pushLog(data.log, '🔥 '+p.name+' 率先抵达全程的80%，商店里开始出现更多奇袭卡……');
+  }
+}
+
+/* 天泉被动：在非自己回合内失去钱，获得（失去金额 ÷ 3）的步数增益。目前唯一会让人
+   在非自己回合掉钱的是"梁上君子"，被偷的这一刻调用这个函数。用带随机后缀的
+   source，让同一回合内被偷好几次时数值分别累加，而不是被"同一来源合并持续时间"
+   的通用规则吞掉（那条规则是给"重复使用同一张卡/技能"设计的，这里每次触发的
+   数值都不一样，应该分开算）。 */
+function applyTianquanPassiveIfTriggered(data, target, lostAmount){
+  if(target.hero==='tianquan' && lostAmount>0){
+    var bonus = Math.floor(lostAmount/3);
+    if(bonus>0){
+      addBuff(target,'STEP_BONUS',bonus,1,'hero-passive:tianquan:'+uid(),'天泉被动');
+      data.log = pushLog(data.log, target.name+' 因被动【天泉】：损失金钱触发 +'+bonus+' 步增益');
+    }
+  }
+}
+
+/* 文津馆被动：这次移动如果越过了某名玩家（移动前在对方位置或更后，移动后严格
+   超过对方），可以立即再掷一次——不把本回合标记为"已掷骰"，这样"掷骰子"按钮
+   仍然可点。掷骰子本身的移动、"凌云踏"这类卡牌的位移都要触发这个检查，所以
+   抽成共用函数。返回是否触发了"再掷一次"。 */
+function checkWenjinguanOvertake(data, p, beforePos){
+  if(p.hero!=='wenjinguan' || data.status!=='playing') return false;
+  var overtook = data.players.some(function(o){ return o.id!==p.id && beforePos<=o.position && p.position>o.position; });
+  if(overtook){
+    data.turnState.rolled = false;
+    data.log = pushLog(data.log, p.name+' 凭借【运筹帷幄】被动越过了对手，可以再掷一次骰子');
+  }
+  return overtook;
 }
 
 /* 找到"这名玩家手牌里是否有某张卡"，返回手牌下标（没有则 -1）——
@@ -149,11 +189,10 @@ export function mutUseSkill(data, playerId, targetId){
     p.hand.push(drawCard()); p.hand.push(drawCard());
     data.log = pushLog(data.log, p.name+' 使用【千金取义】，花费20元获得2张随机卡牌');
   } else if(p.hero==='zuihuayin'){
-    if(!targetId) return {error:'请选择目标玩家'};
-    var t=findPlayer(data,targetId);
-    if(!t || t.id===p.id) return {error:'目标无效'};
-    addBuff(t,'STEP_PENALTY',3,2,'skill:zuihuayin','花醉三千');
-    data.log = pushLog(data.log, p.name+' 使用【花醉三千】，对 '+t.name+' 施加 -3 步减益（持续2回合）');
+    /* 对场上所有其他玩家一起施加减益，不用挑目标 */
+    var zTargets = data.players.filter(function(o){ return o.id!==p.id; });
+    zTargets.forEach(function(o){ addBuff(o,'STEP_PENALTY',3,2,'skill:zuihuayin','花醉三千'); });
+    data.log = pushLog(data.log, p.name+' 使用【花醉三千】，对所有其他玩家施加 -3 步减益（持续2回合）');
   } else if(p.hero==='guyun'){
     /* 排除自己去找"最靠近终点的玩家"——如果孤云自己就是全场第一，
        这里应该找到最领先的对手，然后朝TA的方向移动（可能是往回走）。 */
@@ -164,6 +203,7 @@ export function mutUseSkill(data, playerId, targetId){
     p.hand.push({uid:uid(), key:'lingxu'});
     data.log = pushLog(data.log, p.name+' 使用【大道无为】，向 '+leader.name+' 靠近（到达第'+p.position+'格），并获得一张【凌虚一指】');
     checkWinCondition(data,p);
+    checkMilestone80(data,p);
   } else if(p.hero==='wenjinguan'){
     var d1=1+Math.floor(Math.random()*6), d2=1+Math.floor(Math.random()*6);
     performRoll(data, p, Math.max(d1,d2), ['运筹帷幄：两次骰子分别为'+d1+'和'+d2+'，取较大值']);
@@ -200,6 +240,7 @@ export function mutUseSkill(data, playerId, targetId){
       applyMovement(p,6);
       data.log = pushLog(data.log, p.name+' 本次奇袭有玩家被真正命中，向前推进6格（到达第'+p.position+'格）');
       checkWinCondition(data,p);
+      checkMilestone80(data,p);
     } else {
       p.skillCooldown=0;
       data.log = pushLog(data.log, p.name+' 本次奇袭无人被真正命中，下一回合仍可再次使用【军威赫赫】');
@@ -268,6 +309,7 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
     t2.money -= stolenMoney;
     p.money += stolenMoney;
     data.log = pushLog(data.log, p.name+' 使用【梁上君子】，从 '+t2.name+' 那里偷走了 '+stolenMoney+' 元');
+    applyTianquanPassiveIfTriggered(data, t2, stolenMoney);
   } else if(cardKey==='shexing'){
     if(!targetId) return {error:'请选择目标玩家'};
     var t3=findPlayer(data,targetId);
@@ -302,9 +344,25 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
   } else if(cardKey==='lingyun'){
     var amount = payload && payload.jumpAmount;
     if(card.choice.options.indexOf(amount)===-1) return {error:'请选择要跳跃的格数'};
+    var beforePosLY = p.position;
     applyMovement(p, amount);
     data.log = pushLog(data.log, p.name+' 使用【凌云踏】，向前跳了 '+amount+' 格（到达第 '+p.position+' 格）');
     checkWinCondition(data, p);
+    checkMilestone80(data, p);
+    checkWenjinguanOvertake(data, p, beforePosLY); /* 用这张卡越过别人，也算越过，同样能再掷一次 */
+  } else if(cardKey==='qiaoshan'){
+    /* 无视距离，直接锁定当前排名第一的玩家（排除自己——如果自己就是第一，改打第二名） */
+    var top3=findLeaderExcluding(data,p.id);
+    if(hasActiveSkipTurn(top3)) return {error:top3.name+' 已经处于「即将跳过回合」的保护状态，要等TA的下一次回合结束后才能再被奇袭'};
+    var wIdx4=findHandIndex(top3,'wuxiang');
+    if(wIdx4>-1){
+      top3.hand.splice(wIdx4,1);
+      data.log = pushLog(data.log, p.name+' 对 '+top3.name+' 使用【敲山震虎】，但被对方的【无相金身】格挡了');
+    } else {
+      addBuff(top3,'SKIP_TURN',0,1,'card:qiaoshan','敲山震虎');
+      data.log = pushLog(data.log, p.name+' 对 '+top3.name+' 使用【敲山震虎】，命中！对方将跳过下一回合');
+      onSurpriseAttackSuccess(data, p);
+    }
   } else {
     return {error:'未知卡牌'};
   }
@@ -312,6 +370,9 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
   return {data:data};
 }
 
+/* 商店的买/卖/换一批完全不写进 data.log——这几件事只跟"这名玩家自己的钱和手牌"
+   有关，别人不需要知道你买了什么、卖了什么、换了几次。跟"这个回合打出了什么牌、
+   掷出了几步"这类会实际影响场上局势的操作不是一回事，见 render.js 的横幅播报。 */
 export function mutBuyCard(data, playerId, cardKey){
   if(data.status!=='playing') return {error:'游戏未在进行中'};
   var p=findPlayer(data,playerId);
@@ -324,7 +385,6 @@ export function mutBuyCard(data, playerId, cardKey){
   p.money -= card.price;
   p.hand.push({uid:uid(), key:cardKey});
   p.storeOffer.splice(offerIdx,1); /* 买过的卡牌从这一页下架，换一批之后才会重新出现 */
-  data.log = pushLog(data.log, p.name+' 在商店购买了【'+card.name+'】，花费'+card.price+'元');
   return {data:data};
 }
 
@@ -337,8 +397,8 @@ export function mutSellCard(data, playerId, cardUid){
   if(idx===-1) return {error:'卡牌不存在或已被使用'};
   var card=CARDS[p.hand[idx].key];
   p.hand.splice(idx,1);
-  p.money += 5;
-  data.log = pushLog(data.log, p.name+' 卖出了【'+(card?card.name:'卡牌')+'】，获得5元');
+  /* 商店价30元的卡（好兆骰/飒沓流星/狮吼正声/聚宝盆）卖8元，其余固定卖5元 */
+  p.money += (card && card.price===30) ? SELL_PRICE_FOR_30 : SELL_PRICE_DEFAULT;
   return {data:data};
 }
 
@@ -353,8 +413,8 @@ export function mutRefreshStore(data, playerId){
   if(p.money<cost) return {error:'金钱不足，换一批需要'+cost+'元'};
   p.money -= cost;
   p.storeRefreshCount = count+1;
-  p.storeOffer = genStoreOffer();
-  data.log = pushLog(data.log, p.name+' 刷新了商店'+(cost>0?('，花费'+cost+'元'):'（本回合首次，免费）'));
+  var milestoneBoost = !!data.milestone80PlayerId && data.milestone80PlayerId!==p.id;
+  p.storeOffer = genStoreOffer(data.round, milestoneBoost);
   return {data:data};
 }
 
@@ -397,15 +457,9 @@ function performRoll(data, p, base, extraNotes){
   if(moneyGain>0) msg += '，获得 '+moneyGain+' 元';
   data.log = pushLog(data.log, msg);
   checkWinCondition(data, p);
+  checkMilestone80(data, p);
 
-  /* 文津馆被动：这次移动如果越过了某名玩家（移动前在对方位置或更后，移动后严格超过对方），
-     可以立即再掷一次——不把本回合标记为"已掷骰"，这样"掷骰子"按钮仍然可点，可以连续触发。 */
-  var overtook = data.status==='playing' && p.hero==='wenjinguan' &&
-    data.players.some(function(o){ return o.id!==p.id && beforePos<=o.position && p.position>o.position; });
-  if(overtook){
-    data.turnState.rolled = false;
-    data.log = pushLog(data.log, p.name+' 凭借【运筹帷幄】被动越过了对手，可以再掷一次骰子');
-  } else {
+  if(!checkWenjinguanOvertake(data, p, beforePos)){
     data.turnState.rolled = true;
   }
 }

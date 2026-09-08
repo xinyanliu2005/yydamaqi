@@ -47,7 +47,7 @@ body{
   border:1px solid var(--line-strong);
   border-radius:14px;
   box-shadow:var(--shadow);
-  padding:24px;
+  padding:18px;
 }
 .btn{
   font-family:inherit; font-size:.92rem; font-weight:700; letter-spacing:.03em;
@@ -158,15 +158,28 @@ label.field{ display:flex; flex-direction:column; gap:6px; font-size:.8rem; colo
 
 .side-panel{ display:flex; flex-direction:column; gap:14px; }
 .action-bar{ display:flex; gap:8px; flex-wrap:wrap; }
-.hand-grid{ display:flex; flex-direction:column; gap:8px; }
-.hand-card{ border:1px solid var(--line-strong); border-radius:10px; padding:10px 12px; background:rgba(0,0,0,0.16); }
-.hand-card .cname{ font-weight:700; color:var(--gold); font-size:.9rem; }
-.hand-card .cdesc{ font-size:.72rem; color:var(--ivory-dim); margin:4px 0 8px; line-height:1.5; }
+.hand-grid{ display:flex; flex-direction:column; gap:6px; }
+.hand-card{ border:1px solid var(--line-strong); border-radius:9px; padding:7px 10px; background:rgba(0,0,0,0.16); }
+.hand-card .cname{ font-weight:700; color:var(--gold); font-size:.82rem; }
+.hand-card .cdesc{ font-size:.66rem; color:var(--ivory-dim); margin:2px 0 5px; line-height:1.35; }
 .hand-card .cfoot{ display:flex; justify-content:space-between; align-items:center; }
-.price-tag{ font-size:.72rem; color:var(--ivory-dim); }
+.price-tag{ font-size:.68rem; color:var(--ivory-dim); }
 
-.log-panel{ max-height:220px; overflow-y:auto; display:flex; flex-direction:column-reverse; gap:5px; font-size:.76rem; color:var(--ivory-dim); }
-.log-panel .lg-new{ color:var(--ivory); }
+/* 横幅播报：屏幕顶部滚动显示最新一条对局动态（谁用了什么卡/技能、掷出了几步），
+   取代原来那个可滚动的"对局日志"面板——商店买卖不会出现在这里。 */
+.broadcast-banner{
+  grid-column:1/-1;
+  background:linear-gradient(180deg, rgba(201,162,75,0.3), rgba(201,162,75,0.12));
+  border:1px solid var(--gold-soft);
+  border-radius:10px;
+  padding:9px 16px;
+  font-size:.85rem;
+  font-weight:700;
+  color:var(--ivory);
+  text-align:center;
+  letter-spacing:.01em;
+  box-shadow:var(--shadow);
+}
 
 details.rules{ font-size:.78rem; color:var(--ivory-dim); }
 details.rules summary{ cursor:pointer; color:var(--gold); font-weight:700; }

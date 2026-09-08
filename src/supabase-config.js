@@ -3,5 +3,5 @@
    anon/publishable key。这个 key 是设计给浏览器直接用的（配合数据库的
    Row Level Security 策略控制权限，不是靠隐藏这个 key），可以放心提交到
    公开仓库。把下面的占位符换成你自己项目的真实值即可。 */
-export var SUPABASE_URL = "REPLACE_ME";
-export var SUPABASE_ANON_KEY = "REPLACE_ME";
+export var SUPABASE_URL = "https://swkwqltwhhhvifxwftmh.supabase.co";
+export var SUPABASE_ANON_KEY = "sb_publishable_NBXg36jpNDTCwzVcRQ-zZw_ed8TPaGf";

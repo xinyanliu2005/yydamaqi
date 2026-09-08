@@ -3,23 +3,24 @@
 import { CARDS, HEROES } from './data.js';
 import { roomCode } from './utils.js';
 import { findPlayer, newPlayer } from './game-logic.js';
-import { hasActiveSkipTurn } from './mutators.js';
+import {
+  mutJoin, mutSetHero, mutKick, mutStart, mutUseSkill, mutPlayCard,
+  mutBuyCard, mutSellCard, mutRefreshStore, mutRoll, mutEndTurn, hasActiveSkipTurn
+} from './mutators.js';
 import { render } from './render.js';
 import { runtime, paramRoom } from './app-state.js';
-import { getGame, subscribeGame, runGameTransaction, createRoom as cbCreateRoom } from './cloudbase-db.js';
-import { CLOUDBASE_ENV_ID } from './cloudbase-config.js';
+import { getGame, subscribeGame, runGameTransaction, createRoom as sbCreateRoom } from './supabase-db.js';
+import { SUPABASE_URL } from './supabase-config.js';
 
 var app=document.getElementById('app');
 
 function draw(){ render(app); }
 
-/* 所有会改动房间状态的操作都转发给云函数 applyGameAction（见 cloudbase-db.js 里的
-   runGameTransaction）——CloudBase 的浏览器端 SDK 不支持数据库事务，只有云函数
-   那一侧才有，所以"读最新状态 -> 跑 mutator -> 写回"必须放在服务端做，浏览器这边
-   只负责告诉它"用哪个 mutator、传哪些参数"。mutatorName 要和
-   cloudfunctions/applyGameAction/index.js 里 MUTATORS 表的 key 对上。 */
-function withGameLock(code, mutatorName, args){
-  return runGameTransaction(code, mutatorName, args);
+/* Supabase 的乐观锁（读 version -> 跑 mutator -> 带 version 条件写回，见
+   supabase-db.js）直接在浏览器里完成，不需要像 CloudBase 那样额外部署一个
+   云函数。withGameLock 这个名字保留下来只是为了不用改下面几十处调用点。 */
+function withGameLock(code, mutator){
+  return runGameTransaction(code, mutator);
 }
 
 function showError(msg){
@@ -46,7 +47,7 @@ function createRoom(name, heroKey){
     log:[{ts:Date.now(), text:'房间创建，等待玩家加入…'}],
     winner:null
   };
-  cbCreateRoom(code, initial).then(function(res){
+  sbCreateRoom(code, initial).then(function(res){
     if(res.ok===false){ showError(res.error||'创建房间失败，请重试'); return; }
     enterRoom(code);
   });
@@ -59,7 +60,7 @@ function joinRoom(code, name, heroKey){
   runtime.ui.joining=true; draw();
   getGame(code).then(function(snap){
     if(!snap.exists){ runtime.ui.joining=false; showError('房间不存在，请检查房间号'); return; }
-    return withGameLock(code, 'mutJoin', [runtime.myId, name, heroKey]).then(function(res){
+    return withGameLock(code, function(data){ return mutJoin(data, runtime.myId, name, heroKey); }).then(function(res){
       runtime.ui.joining=false;
       if(res.ok===false){ showError(res.error); return; }
       enterRoom(code);
@@ -112,16 +113,16 @@ app.addEventListener('click', function(e){
   }
   if(action==='set-hero-lobby'){
     var hk=el.getAttribute('data-hero');
-    runAction(function(){ return withGameLock(myRoom, 'mutSetHero', [myId,hk]); });
+    runAction(function(){ return withGameLock(myRoom, function(data){ return mutSetHero(data,myId,hk); }); });
     return;
   }
   if(action==='kick'){
     var tid=el.getAttribute('data-id');
-    runAction(function(){ return withGameLock(myRoom, 'mutKick', [myId,tid]); });
+    runAction(function(){ return withGameLock(myRoom, function(data){ return mutKick(data,myId,tid); }); });
     return;
   }
   if(action==='start-game'){
-    runAction(function(){ return withGameLock(myRoom, 'mutStart', [myId]); });
+    runAction(function(){ return withGameLock(myRoom, function(data){ return mutStart(data,myId); }); });
     return;
   }
   if(action==='leave'){ leaveRoom(); return; }
@@ -144,15 +145,15 @@ app.addEventListener('click', function(e){
       var opponents=game.players.filter(function(p){ return p.id!==myId; });
       if(opponents.length===0) return;
       if(opponents.length===1){
-        runAction(function(){ return withGameLock(myRoom, 'mutUseSkill', [myId,opponents[0].id]); });
+        runAction(function(){ return withGameLock(myRoom, function(data){ return mutUseSkill(data,myId,opponents[0].id); }); });
       } else {
         ui.pendingTarget={ kind:'skill', title:'花醉三千 · 选择目标', confirmAction:function(tid){
-          return withGameLock(myRoom, 'mutUseSkill', [myId,tid]);
+          return withGameLock(myRoom, function(data){ return mutUseSkill(data,myId,tid); });
         }};
         draw();
       }
     } else {
-      runAction(function(){ return withGameLock(myRoom, 'mutUseSkill', [myId,null]); });
+      runAction(function(){ return withGameLock(myRoom, function(data){ return mutUseSkill(data,myId,null); }); });
     }
     return;
   }
@@ -165,7 +166,7 @@ app.addEventListener('click', function(e){
       /* 目前只有"跳X格"这一种选择类型，选项直接来自卡牌定义 */
       ui.pendingChoice={ title:cdef.name+' · 选择跳跃格数', options:cdef.choice.options.map(function(n){ return {label:'+'+n+'格', value:n}; }),
         confirmAction:function(v){
-          return withGameLock(myRoom, 'mutPlayCard', [myId,cuid,null,{jumpAmount:v}]);
+          return withGameLock(myRoom, function(data){ return mutPlayCard(data,myId,cuid,null,{jumpAmount:v}); });
         }};
       draw();
       return;
@@ -181,22 +182,22 @@ app.addEventListener('click', function(e){
       }
       if(opps.length===0){ showError('范围内没有可选目标（或对方都处于保护状态）'); return; }
       if(opps.length===1){
-        runAction(function(){ return withGameLock(myRoom, 'mutPlayCard', [myId,cuid,opps[0].id]); });
+        runAction(function(){ return withGameLock(myRoom, function(data){ return mutPlayCard(data,myId,cuid,opps[0].id); }); });
       } else {
         ui.pendingTarget={ kind:'card', title:cdef.name+' · 选择目标', candidates:opps, confirmAction:function(tid){
-          return withGameLock(myRoom, 'mutPlayCard', [myId,cuid,tid]);
+          return withGameLock(myRoom, function(data){ return mutPlayCard(data,myId,cuid,tid); });
         }};
         draw();
       }
     } else {
-      runAction(function(){ return withGameLock(myRoom, 'mutPlayCard', [myId,cuid,null]); });
+      runAction(function(){ return withGameLock(myRoom, function(data){ return mutPlayCard(data,myId,cuid,null); }); });
     }
     return;
   }
 
   if(action==='sell-card'){
     var suid=el.getAttribute('data-uid');
-    runAction(function(){ return withGameLock(myRoom, 'mutSellCard', [myId,suid]); });
+    runAction(function(){ return withGameLock(myRoom, function(data){ return mutSellCard(data,myId,suid); }); });
     return;
   }
 
@@ -206,12 +207,12 @@ app.addEventListener('click', function(e){
     return;
   }
   if(action==='refresh-store'){
-    runAction(function(){ return withGameLock(myRoom, 'mutRefreshStore', [myId]); });
+    runAction(function(){ return withGameLock(myRoom, function(data){ return mutRefreshStore(data,myId); }); });
     return;
   }
   if(action==='buy-card'){
     var bkey=el.getAttribute('data-key');
-    runAction(function(){ return withGameLock(myRoom, 'mutBuyCard', [myId,bkey]); });
+    runAction(function(){ return withGameLock(myRoom, function(data){ return mutBuyCard(data,myId,bkey); }); });
     return;
   }
 
@@ -236,11 +237,11 @@ app.addEventListener('click', function(e){
   if(action==='cancel-choice'){ ui.pendingChoice=null; draw(); return; }
 
   if(action==='roll-dice'){
-    runAction(function(){ return withGameLock(myRoom, 'mutRoll', [myId]); });
+    runAction(function(){ return withGameLock(myRoom, function(data){ return mutRoll(data,myId); }); });
     return;
   }
   if(action==='end-turn'){
-    runAction(function(){ return withGameLock(myRoom, 'mutEndTurn', [myId]); });
+    runAction(function(){ return withGameLock(myRoom, function(data){ return mutEndTurn(data,myId); }); });
     return;
   }
   if(action==='back-home-finished'){ leaveRoom(); return; }
@@ -252,7 +253,7 @@ app.addEventListener('focus', function(e){
 
 /* 房间列表里换英雄的 <select> 用内联 onchange 调用，挂到 window 上 */
 window.__lqSetHero = function(hk){
-  runAction(function(){ return withGameLock(runtime.myRoom, 'mutSetHero', [runtime.myId,hk]); });
+  runAction(function(){ return withGameLock(runtime.myRoom, function(data){ return mutSetHero(data,runtime.myId,hk); }); });
 };
 
 /* ===================== 启动 ===================== */
@@ -260,10 +261,10 @@ function boot(){
   var initial=paramRoom();
   if(initial){ runtime.ui.homeMode='join'; }
 
-  /* CloudBase 本身在 cloudbase-db.js 第一次用到时才初始化（惰性），这里只检查
-     cloudbase-config.js 里的占位符有没有被换成真实环境 ID，没换的话给出明确
+  /* Supabase 客户端在 supabase-db.js 第一次用到时才惰性初始化，这里只检查
+     supabase-config.js 里的占位符有没有被换成真实项目配置，没换的话给出明确
      提示而不是让后面的调用抛出一堆看不懂的底层报错。 */
-  runtime.db = CLOUDBASE_ENV_ID !== 'REPLACE_ME';
+  runtime.db = SUPABASE_URL !== 'REPLACE_ME';
   draw();
 
   if(runtime.db && initial){

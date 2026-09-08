@@ -8,9 +8,11 @@
 </head>
 <body>
 <div id="app"></div>
-<!-- CloudBase 的浏览器 SDK 是 UMD 构建，挂到全局变量 window.cloudbase 上，
-     不是 ES module，所以用普通 <script> 标签、且必须排在下面的模块脚本前面。 -->
-<script src="https://static.cloudbase.net/cloudbase-js-sdk/3.9.2/cloudbase.full.js"></script>
+<!-- Supabase 的浏览器 SDK 是 UMD 构建，挂到全局变量 window.supabase 上，不是
+     ES module，所以用普通 <script> 标签、且必须排在下面的模块脚本前面。文件
+     本地放在 src/vendor/ 下而不是从 jsdelivr/unpkg 这类第三方 CDN 加载——那些
+     CDN 在中国大陆经常被 DNS 污染，直接把 SDK 提交进仓库更可靠。 -->
+<script src="src/vendor/supabase.umd.js"></script>
 <script type="module" src="src/app.js"></script>
 </body>
 </html>

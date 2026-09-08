@@ -2,43 +2,33 @@
 
 一个 2–4 人在线飞行棋，支持英雄技能和卡牌对战。[index.html](index.html) + [src/](src/) 是真正
 运行的多文件源码（浏览器原生 ES module，不需要打包/构建步骤），部署在 Netlify 上，任何人拿到
-链接都能直接玩，不需要登录任何账号。跨设备的共享房间状态同步用腾讯云开发 CloudBase
-（见 [src/cloudbase-db.js](src/cloudbase-db.js)）。
+链接都能直接玩，不需要登录任何账号。跨设备的共享房间状态同步用 Supabase（Postgres）
+（见 [src/supabase-db.js](src/supabase-db.js)）。
 
 > 这个项目最早是作为 Claude Artifact 发布的（单文件、通过 Claude 的 `db` 运行时能力同步状态），
-> 后来因为 Artifact 的分享权限被限制、朋友打不开链接，迁移到了 Netlify 静态托管；一开始用的是
-> Firebase Firestore，但 Firebase 是 Google 的基础设施，中国大陆用户不开 VPN 完全连不上，于是
-> 又换成了腾讯云开发 CloudBase——不再依赖 Claude 账号、Artifact 平台，也不再依赖需要翻墙的服务。
+> 后来因为 Artifact 的分享权限被限制、朋友打不开链接，迁移到了 Netlify 静态托管；共享状态的后端
+> 换过两次——先是 Firebase Firestore（Google 的基础设施，中国大陆用户不开 VPN 完全连不上），
+> 后来换成腾讯云开发 CloudBase（国内可访问，但免费体验环境到期后需要每月约 20 元的付费套餐），
+> 最后定在 Supabase（免费额度长期有效，国内访问较慢但并非完全屏蔽——如果之后发现访问质量不
+> 可接受，CloudBase 那一套仍然是验证过可行的备选，历史代码在 git 记录里）。
 
 ## 部署前需要做的事
 
-**1. CloudBase 环境**（共享房间状态存在这里）：
-1. https://console.cloud.tencent.com/tcb → 新建环境（免费额度够用）。
-2. 左侧「数据库」→ 新建一个集合，名字必须叫 `games`（代码里写死了这个集合名）。
-3. 左侧「登录授权」→ 开启「匿名登录」（这个游戏没有账号系统，靠一个匿名身份满足数据库安全
-   规则里"必须是登录状态"的要求）。
-4. 数据库 → `games` 集合的权限设置里，把内容换成仓库根目录 [cloudbase.rules.json](cloudbase.rules.json)
-   （只允许读，不允许写——所有写操作都通过下面的云函数完成，客户端不直接写数据库）。
-5. 环境 ID 就在控制台环境列表/概览页能看到（形如 `xxx-yyy` 或者干脆是环境名本身），把它填进
-   [src/cloudbase-config.js](src/cloudbase-config.js) 的 `CLOUDBASE_ENV_ID`，替换掉 `REPLACE_ME`。
-   这个 ID 不是密钥，可以放心提交到仓库里。
+**1. Supabase 项目**（共享房间状态存在这里）：
+1. https://supabase.com/dashboard → 新建项目（免费额度长期有效，不是限时试用）。
+2. 左侧 SQL Editor → 新建查询 → 把仓库根目录 [supabase-setup.sql](supabase-setup.sql) 的内容
+   整段粘贴进去执行一次。这会建好 `games` 表、开放匿名读写的安全策略、并打开这张表的实时推送。
+3. Project Settings → API → 复制 **Project URL** 和 **anon / publishable key**，分别填进
+   [src/supabase-config.js](src/supabase-config.js) 的 `SUPABASE_URL` 和 `SUPABASE_ANON_KEY`，
+   替换掉 `REPLACE_ME`。这个 key 是设计给浏览器用的，可以放心提交到仓库里——真正的访问控制
+   在上一步的安全策略（RLS policy），不是靠隐藏这个 key。
 
-**2. 部署云函数**（负责真正的读写，用到数据库事务，只有服务端能做）：
-1. 跑一次 `node scripts/build-cloud-function.js`，把 `src/` 里的游戏规则打包进
-   `cloudfunctions/applyGameAction/game-logic-bundle.js`。
-2. CloudBase 控制台 → 云函数 → 新建函数，名字必须叫 `applyGameAction`（代码里写死了这个名字）。
-3. 把 `cloudfunctions/applyGameAction/` 整个目录的内容上传/粘贴进去（`index.js` +
-   `game-logic-bundle.js` + `package.json`），运行环境选 Node.js。
-4. 安装依赖（控制台一般有"安装依赖"按钮读取 `package.json`；如果没有，本地在这个目录跑
-   `npm install` 后把连 `node_modules` 一起打包上传）。
-5. 部署。**以后每次改了 `src/` 里的游戏规则，都要重新跑一次上面的打包脚本、重新上传这个云函数**
-   ——它不会跟着 Netlify 的自动部署一起更新，是完全独立的一份代码。
-
-**3. 部署到 Netlify**：这是纯静态站点，没有构建步骤。
+**2. 部署到 Netlify**：这是纯静态站点，没有构建步骤。
 - 如果通过 Git 连接：app.netlify.com → Add new site → Import an existing project →
   选这个仓库 → Publish directory 填 `.`（仓库根目录），Build command 留空。
 - 仓库里的 [netlify.toml](netlify.toml) 已经写好了这两项，Netlify 通常会自动识别。
-- 之后每次 push 到关联的分支，Netlify 会自动重新部署（但云函数不会，见上一步）。
+- 之后每次 push 到关联的分支，Netlify 会自动重新部署——**这次迁移之后没有额外的部署步骤了**
+  （不像 CloudBase 那版还需要单独部署一个云函数）。
 
 ## 当前玩法规则（已实现）
 
@@ -114,28 +104,19 @@
 | [src/data.js](src/data.js) | `HEROES` / `CARDS` / `PLAYER_COLORS` / `WIN_POS` / `STORE_REFRESH_PRICES` 静态数据表。加新英雄/卡牌从这里加一条即可，逻辑代码不用大改。 |
 | [src/utils.js](src/utils.js) | 与游戏规则无关的通用工具函数（uid、洗牌、生成房间号、HTML 转义…）。 |
 | [src/game-logic.js](src/game-logic.js) | 游戏规则用的辅助函数：查玩家、判断当前回合、buff 增删/叠加/递减、发牌、每回合开始的结算等。 |
-| [src/mutators.js](src/mutators.js) | **mutator 函数**（`mutJoin` / `mutStart` / `mutUseSkill` / `mutPlayCard` / `mutBuyCard` / `mutRefreshStore` / `mutRoll` / `mutEndTurn` 等）——纯函数，输入当前房间状态、输出新状态或报错，是游戏规则真正跑的地方。加新效果基本就是在这几个函数里加分支。**这几个文件（data/utils/game-logic/mutators）不依赖浏览器 API，同时也被云函数复用**（见下面的 cloudfunctions）。 |
+| [src/mutators.js](src/mutators.js) | **mutator 函数**（`mutJoin` / `mutStart` / `mutUseSkill` / `mutPlayCard` / `mutBuyCard` / `mutRefreshStore` / `mutRoll` / `mutEndTurn` 等）——纯函数，输入当前房间状态、输出新状态或报错，是游戏规则真正跑的地方。加新效果基本就是在这几个函数里加分支。这些函数直接在浏览器里跑（Supabase 的乐观锁允许这样做，不需要像上一版 CloudBase 那样单独部署一个云函数）。 |
 | [src/app-state.js](src/app-state.js) | 运行时可变状态（是否已连上共享存储、我的身份、当前房间号、UI 状态）放在一个共享 `runtime` 对象里，供 app.js 和 render.js 一起读写。 |
 | [src/render.js](src/render.js) | 所有渲染函数——纯字符串拼 HTML 再整体替换，没有用框架。 |
-| [src/app.js](src/app.js) | 入口：房间创建/加入/订阅、事件委托、启动逻辑。所有会改动房间状态的操作都只是把"用哪个 mutator、传什么参数"转发给云函数，不在浏览器里直接跑 mutator。 |
-| [src/cloudbase-config.js](src/cloudbase-config.js) | 你自己 CloudBase 环境的 ID——部署前必须把占位符换成真实值。 |
-| [src/cloudbase-db.js](src/cloudbase-db.js) | 浏览器这一侧的数据库封装：`getGame` / `subscribeGame`（直接读/监听数据库，不需要经过云函数）、`runGameTransaction` / `createRoom`（转发给云函数 `applyGameAction`）。 |
+| [src/app.js](src/app.js) | 入口：房间创建/加入/订阅、事件委托、启动逻辑；`withGameLock` 包一层调用 mutator、转发给 supabase-db.js 的乐观锁写回。 |
+| [src/supabase-config.js](src/supabase-config.js) | 你自己 Supabase 项目的 URL 和 anon key——部署前必须把占位符换成真实值。 |
+| [src/supabase-db.js](src/supabase-db.js) | 浏览器这一侧的数据库封装：`getGame` / `subscribeGame`（直接读/监听数据库）、`runGameTransaction`（乐观锁：读 version → 跑 mutator → 带 version 条件写回，冲突就重读重试）、`createRoom`。 |
+| [src/vendor/supabase.umd.js](src/vendor/supabase.umd.js) | Supabase 浏览器 SDK，直接提交进仓库、跟着 Netlify 一起发布——**没有走 jsdelivr/unpkg 这类第三方 CDN**，因为它们在中国大陆经常被 DNS 污染（详见下面"部署前需要做的事"上方的说明）。升级 SDK 版本就是重新下载这个文件替换掉。 |
 | [src/style.css](src/style.css) | 全部样式，`index.html` 用 `<link>` 直接引用。 |
-| [cloudfunctions/applyGameAction/](cloudfunctions/applyGameAction/) | 云函数：真正执行"读最新房间状态 → 跑 mutator → 写回"的地方，用数据库事务保证原子性（CloudBase 的浏览器端 SDK 不支持事务，只有这里——服务端 node-sdk——才支持）。`game-logic-bundle.js` 是自动生成的，不要手改，见下面的打包脚本。 |
-| [scripts/build-cloud-function.js](scripts/build-cloud-function.js) | 把 `src/{data,utils,game-logic,mutators}.js` 打包成 `cloudfunctions/applyGameAction/game-logic-bundle.js`（CommonJS，供云函数 `require()`）。改了游戏规则之后要跑这个脚本，再重新部署云函数。 |
+| [supabase-setup.sql](supabase-setup.sql) | 建表 + 安全策略 + 打开实时推送的 SQL，在 Supabase 控制台的 SQL Editor 里跑一次即可。 |
 
 ## 如何开发 / 更新线上版本
 
-**改前端/UI/游戏规则**（`src/` 下任意文件）：直接用浏览器打开（需要经过一个静态服务器，比如
-`npx serve`——ES module 走 `file://` 协议在部分浏览器里会被 CORS 拦住）验证没问题后提交、push，
-Netlify 会自动重新部署。**这部分没有构建步骤**——`index.html` 和 `src/*.js` 就是线上跑的代码
-本身，改完就是改完。
-
-**如果改的是游戏规则**（`src/data.js` / `src/mutators.js` / `src/game-logic.js` / `src/utils.js`
-任意一个）：因为云函数用的是这几个文件打包出来的一份独立拷贝，还需要额外两步——
-1. `node scripts/build-cloud-function.js` 重新生成 `cloudfunctions/applyGameAction/game-logic-bundle.js`。
-2. 把 `cloudfunctions/applyGameAction/` 整个目录重新上传/部署到 CloudBase 控制台的云函数
-   `applyGameAction`。
-
-漏了这一步的话，前端显示的卡牌描述之类的文字会更新，但云函数里跑的判定逻辑还是旧的——两边会
-不一致。
+改 `src/` 下对应模块的代码，直接用浏览器打开（需要经过一个静态服务器，比如 `npx serve`——
+ES module 走 `file://` 协议在部分浏览器里会被 CORS 拦住）验证没问题后提交、push，Netlify
+会自动重新部署。**没有构建步骤，也没有需要单独部署的云函数**——`index.html` 和 `src/*.js`
+就是线上跑的代码本身，改完就是改完。

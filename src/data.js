@@ -1,41 +1,45 @@
 /* ===================== 静态数据 ===================== */
 /* 加新英雄/卡牌从这里加一条即可，逻辑代码（mutators.js）不用大改。 */
 
+/* type 只用于选英雄界面按"流派"分组展示（省地方，不在挑英雄那一步就把一大段
+   技能说明摊开）；具体数值/效果说明还是在游戏内的"规则说明"里。 */
+export var HERO_TYPE_ORDER = ['神行','控场','执锐'];
+
 export var HEROES = {
   tianquan: {
-    key:'tianquan', name:'天泉', color:'#4d7eb0',
+    key:'tianquan', name:'天泉', color:'#4d7eb0', type:'神行',
     activeName:'千金取义',
     activeDesc:'花20块钱获得随机两张卡牌',
     passiveName:'被动',
     passiveDesc:'在非自己回合内失去钱，将获得步数增益（失去金额 ÷ 3）'
   },
   zuihuayin: {
-    key:'zuihuayin', name:'醉花阴', color:'#9a5cc0',
+    key:'zuihuayin', name:'醉花阴', color:'#9a5cc0', type:'控场',
     activeName:'花醉三千',
-    activeDesc:'使敌方玩家减益3步数，持续2回合',
+    activeDesc:'对场上所有其他玩家施加3步减益，持续2回合',
     passiveName:'被动',
     passiveDesc:'场上敌人若带有减益，自己额外获得3步数'
   },
-  guyun: {
-    key:'guyun', name:'孤云', color:'#6b8f71',
-    activeName:'大道无为',
-    activeDesc:'朝场上最靠近终点的玩家靠近：若相距≤6格，直接移动到对方所在格；若超过6格，则朝对方方向移动6格。移动后立刻获得一张【凌虚一指】。冷却2回合。',
-    passiveName:'被动',
-    passiveDesc:'落后于场上最靠近终点的玩家3-4格时+2步，落后5-9格时+5步，落后10格及以上时+7步'
-  },
   wenjinguan: {
-    key:'wenjinguan', name:'文津馆', color:'#3f6b8a',
+    key:'wenjinguan', name:'文津馆', color:'#3f6b8a', type:'神行',
     activeName:'运筹帷幄',
     activeDesc:'投两次骰子，取点数较大的一次结算本回合移动',
     passiveName:'被动',
     passiveDesc:'本回合的移动如果越过了某名玩家的位置，可以再掷一次骰子；只要还在越过别人，就能一直连续再掷'
   },
   kuanglan: {
-    key:'kuanglan', name:'狂澜', color:'#a83232',
+    key:'kuanglan', name:'狂澜', color:'#a83232', type:'执锐',
     activeName:'军威赫赫',
     activeDesc:'对当前位置前后6格内的所有玩家发起奇袭，使其跳过下一回合（可被「无相金身」格挡，处于保护状态的玩家免疫）；无论是否命中，被扫到的玩家都会被随机移除自身一项效果。若本次无人被真正命中跳过，下回合仍可再次使用（不进入冷却）；若有人被命中，则进入2回合冷却，并使自己前进6格。',
     passiveName:'被动',
     passiveDesc:'每次使用主动技能，自己获得 +3 步（用于紧接着的下一次掷骰子）'
+  },
+  guyun: {
+    key:'guyun', name:'孤云', color:'#6b8f71', type:'执锐',
+    activeName:'大道无为',
+    activeDesc:'朝场上最靠近终点的玩家靠近：若相距≤6格，直接移动到对方所在格；若超过6格，则朝对方方向移动6格。移动后立刻获得一张【凌虚一指】。冷却2回合。',
+    passiveName:'被动',
+    passiveDesc:'落后于场上最靠近终点的玩家3-4格时+2步，落后5-9格时+5步，落后10格及以上时+7步'
   }
 };
 

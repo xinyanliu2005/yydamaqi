@@ -37,3 +37,14 @@ export function weightedPickWithoutReplacement(weights, count){
   }
   return result;
 }
+
+/* 按权重抽 1 个 key（放回抽样，可以重复）——免费发牌/千金取义用这个，跟商店那种
+   "5张互不重复"的抽法不一样，每次抽都是独立的。 */
+export function weightedPickOne(weights){
+  var keys = Object.keys(weights).filter(function(k){ return weights[k]>0; });
+  var total = keys.reduce(function(s,k){ return s+weights[k]; }, 0);
+  var r = Math.random()*total;
+  var acc=0;
+  for(var i=0;i<keys.length;i++){ acc+=weights[keys[i]]; if(r<acc) return keys[i]; }
+  return keys[keys.length-1];
+}

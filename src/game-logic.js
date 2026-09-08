@@ -2,7 +2,7 @@
 /* 这些函数操作房间状态（data / player），供 mutators.js 里的各个 mutXxx 组合使用。 */
 
 import { CARDS, STORE_WEIGHTS_EARLY, STORE_WEIGHTS_MID, MILESTONE_SURPRISE_ATTACK_BOOST } from './data.js';
-import { uid, weightedPickWithoutReplacement } from './utils.js';
+import { uid, weightedPickWithoutReplacement, weightedPickOne } from './utils.js';
 
 export function findPlayer(data,id){ for(var i=0;i<data.players.length;i++) if(data.players[i].id===id) return data.players[i]; return null; }
 export function nameOf(data,id){ var p=findPlayer(data,id); return p? p.name : '?'; }
@@ -35,19 +35,14 @@ export function pushLog(log,text){
   return l.slice(-40);
 }
 
-export function drawCard(){
-  var keys=Object.keys(CARDS);
-  var k=keys[Math.floor(Math.random()*keys.length)];
-  return {uid:uid(), key:k};
-}
-
-/* 商店每一页 5 张卡牌互不重复，按权重抽（见 data.js 里的 STORE_WEIGHTS_EARLY /
-   STORE_WEIGHTS_MID / MILESTONE_SURPRISE_ATTACK_BOOST）：
+/* 卡牌权重表——按"游戏阶段"分两档基础权重（见 data.js 里的 STORE_WEIGHTS_EARLY /
+   STORE_WEIGHTS_MID / MILESTONE_SURPRISE_ATTACK_BOOST），商店上架、免费发牌、
+   千金取义抽卡全都走这一套概率，不是各自独立的规则：
    - round < 3：用"早期"权重表（新手卡+被动卡常见，奇袭类很少见，部分卡完全不会出现）
    - round >= 3：用"中期"权重表（干扰/进攻类卡牌变多）
    - milestoneBoost：true 表示"已经有玩家冲到全程80%，且当前抽卡的不是那个人"，
      这时候在上面任一档权重的基础上，再给奇袭类卡牌加权重（可能让它们从0变成可抽到）。 */
-export function genStoreOffer(round, milestoneBoost){
+function computeCardWeights(round, milestoneBoost){
   var base = (round && round>=3) ? STORE_WEIGHTS_MID : STORE_WEIGHTS_EARLY;
   var weights={};
   Object.keys(CARDS).forEach(function(k){ weights[k] = base[k]!=null ? base[k] : 1; });
@@ -56,7 +51,18 @@ export function genStoreOffer(round, milestoneBoost){
       weights[k] = (weights[k]||0) + MILESTONE_SURPRISE_ATTACK_BOOST[k];
     });
   }
-  return weightedPickWithoutReplacement(weights, 5);
+  return weights;
+}
+
+/* 免费发牌（每轮发2张）、千金取义（抽2张）用这个——按权重抽1张，可以重复。 */
+export function drawCard(round, milestoneBoost){
+  var k = weightedPickOne(computeCardWeights(round, milestoneBoost));
+  return {uid:uid(), key:k};
+}
+
+/* 商店每一页 5 张卡牌互不重复，按权重抽。 */
+export function genStoreOffer(round, milestoneBoost){
+  return weightedPickWithoutReplacement(computeCardWeights(round, milestoneBoost), 5);
 }
 
 export function newPlayer(id,name,hero){
@@ -73,8 +79,9 @@ export function grantRoundResources(data, playerId){
   var p=findPlayer(data,playerId);
   if(!p) return;
   p.money += 30;
-  p.hand.push(drawCard());
-  p.hand.push(drawCard());
+  var milestoneBoost = !!data.milestone80PlayerId && data.milestone80PlayerId!==playerId;
+  p.hand.push(drawCard(data.round, milestoneBoost));
+  p.hand.push(drawCard(data.round, milestoneBoost));
 }
 
 /* 轮到"这名玩家自己的回合"时才结算的个人状态——技能冷却递减、商店刷新次数重置。

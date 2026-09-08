@@ -81,14 +81,17 @@ label.field{ display:flex; flex-direction:column; gap:6px; font-size:.8rem; colo
 .mode-switch{ display:flex; gap:8px; margin-bottom:18px; }
 .mode-switch button{ flex:1; }
 .mode-switch button.active{ background:linear-gradient(180deg,#dcb668,var(--gold)); color:#2a1d05; border-color:transparent; }
-.hero-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:6px 0 4px; }
-.hero-pick{
-  border:1px solid var(--line-strong); border-radius:10px; padding:12px; cursor:pointer;
-  background:rgba(0,0,0,0.18); text-align:left;
+/* 选英雄：按流派分组，一行一个流派，名字紧凑排开，省地方——技能细节留在
+   游戏内的规则说明里，这里不展开。 */
+.hero-grid{ display:flex; flex-direction:column; gap:8px; margin:6px 0 4px; }
+.hero-type-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.hero-type-label{ font-size:.72rem; color:var(--ivory-dim); letter-spacing:.1em; flex-shrink:0; width:3.2em; }
+.hero-name-btn{
+  font-family:inherit; font-size:.85rem; font-weight:700; color:var(--ivory); cursor:pointer;
+  border:1px solid var(--line-strong); border-radius:8px; padding:6px 14px;
+  background:rgba(0,0,0,0.18);
 }
-.hero-pick.selected{ border-color:var(--gold); background:rgba(201,162,75,0.14); box-shadow:0 0 0 1px var(--gold) inset; }
-.hero-pick .hname{ font-family:'Ma Shan Zheng',cursive; font-size:1.3rem; color:var(--gold); }
-.hero-pick .hskill{ font-size:.72rem; color:var(--ivory-dim); margin-top:4px; line-height:1.5; }
+.hero-name-btn.selected{ border-color:var(--gold); background:rgba(201,162,75,0.18); color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset; }
 .stack{ display:flex; flex-direction:column; gap:14px; }
 .row{ display:flex; gap:10px; align-items:flex-end; }
 .row > *{ flex:1; }

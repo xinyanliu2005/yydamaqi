@@ -22,15 +22,20 @@ function checkWinCondition(data, p){
   }
 }
 
-/* 全场第一次有玩家抵达全程 80%（见 data.js 的 MILESTONE_RATIO）时记一下——
-   之后商店给"其他玩家"（不是率先冲线的这个人）上架奇袭卡的概率会提高，
-   见 game-logic.js 的 genStoreOffer。只记第一次，谁先到就是谁，不会被后来者
-   顶替，也不会因为掉出80%以下而撤销。 */
-function checkMilestone80(data, p){
-  if(!data.milestone80PlayerId && p.position >= Math.ceil(WIN_POS*MILESTONE_RATIO) && data.status==='playing'){
-    data.milestone80PlayerId = p.id;
-    data.log = pushLog(data.log, '🔥 '+p.name+' 率先抵达全程的80%，商店里开始出现更多奇袭卡……');
-  }
+/* 每一轮结束时（回合顺序绕回第一个玩家）检查一次：是否已经有玩家的位置达到了
+   全程 80%（见 data.js 的 MILESTONE_RATIO）——不是随时随地一有人踩到就立刻生效，
+   而是"这一轮打完，盘点一下"。之后商店给"其他玩家"（不是率先冲线的这个人）
+   上架奇袭卡的概率会提高，见 game-logic.js 的 genStoreOffer。只记一次，谁先到
+   就是谁；如果这一轮结束时同时有好几个人都过了80%，算给位置最靠前的那个人。
+   已经定过之后不会因为掉出80%以下而撤销，也不会被后来者顶替。 */
+function checkMilestone80AtRoundEnd(data){
+  if(data.milestone80PlayerId) return;
+  var threshold = Math.ceil(WIN_POS*MILESTONE_RATIO);
+  var candidates = data.players.filter(function(pl){ return pl.position>=threshold; });
+  if(candidates.length===0) return;
+  var winner = candidates.reduce(function(best,pl){ return pl.position>best.position ? pl : best; });
+  data.milestone80PlayerId = winner.id;
+  data.log = pushLog(data.log, '🔥 '+winner.name+' 在这一轮结束时率先达到全程的80%，商店里开始出现更多奇袭卡……');
 }
 
 /* 天泉被动：在非自己回合内失去钱，获得（失去金额 ÷ 3）的步数增益。目前唯一会让人
@@ -168,8 +173,13 @@ export function mutStart(data, requesterId){
   data.status = 'playing';
   data.round = 1;
   data.turnState = {rolled:false, skillUsed:false, lastRoll:null};
-  /* 第一轮开始：所有玩家同时获得这一轮的金钱和卡牌，而不是等到各自的回合才发 */
-  order.forEach(function(pid){ grantRoundResources(data, pid); });
+  /* 第一轮开始：所有玩家同时获得这一轮的金钱和卡牌，商店也按第1轮的权重刷新一次
+     （不是等到各自的回合才发，也不是沿用大厅里的初始商店） */
+  order.forEach(function(pid){
+    grantRoundResources(data, pid);
+    var pl = findPlayer(data, pid);
+    pl.storeOffer = genStoreOffer(data.round, false); /* 第1轮不可能有人已到80% */
+  });
   grantTurnStart(data, order[0]);
   data.log = pushLog(data.log, '游戏开始！骰子决定顺序，'+nameOf(data,order[0])+' 先手；本轮所有玩家已同时获得资源');
   return {data:data};
@@ -186,7 +196,8 @@ export function mutUseSkill(data, playerId, targetId){
   if(p.hero==='tianquan'){
     if(p.money<20) return {error:'金钱不足，千金取义需要20元'};
     p.money -= 20;
-    p.hand.push(drawCard()); p.hand.push(drawCard());
+    var tqMilestoneBoost = !!data.milestone80PlayerId && data.milestone80PlayerId!==p.id;
+    p.hand.push(drawCard(data.round, tqMilestoneBoost)); p.hand.push(drawCard(data.round, tqMilestoneBoost));
     data.log = pushLog(data.log, p.name+' 使用【千金取义】，花费20元获得2张随机卡牌');
   } else if(p.hero==='zuihuayin'){
     /* 对场上所有其他玩家一起施加减益，不用挑目标 */
@@ -203,7 +214,6 @@ export function mutUseSkill(data, playerId, targetId){
     p.hand.push({uid:uid(), key:'lingxu'});
     data.log = pushLog(data.log, p.name+' 使用【大道无为】，向 '+leader.name+' 靠近（到达第'+p.position+'格），并获得一张【凌虚一指】');
     checkWinCondition(data,p);
-    checkMilestone80(data,p);
   } else if(p.hero==='wenjinguan'){
     var d1=1+Math.floor(Math.random()*6), d2=1+Math.floor(Math.random()*6);
     performRoll(data, p, Math.max(d1,d2), ['运筹帷幄：两次骰子分别为'+d1+'和'+d2+'，取较大值']);
@@ -240,7 +250,6 @@ export function mutUseSkill(data, playerId, targetId){
       applyMovement(p,6);
       data.log = pushLog(data.log, p.name+' 本次奇袭有玩家被真正命中，向前推进6格（到达第'+p.position+'格）');
       checkWinCondition(data,p);
-      checkMilestone80(data,p);
     } else {
       p.skillCooldown=0;
       data.log = pushLog(data.log, p.name+' 本次奇袭无人被真正命中，下一回合仍可再次使用【军威赫赫】');
@@ -348,7 +357,6 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
     applyMovement(p, amount);
     data.log = pushLog(data.log, p.name+' 使用【凌云踏】，向前跳了 '+amount+' 格（到达第 '+p.position+' 格）');
     checkWinCondition(data, p);
-    checkMilestone80(data, p);
     checkWenjinguanOvertake(data, p, beforePosLY); /* 用这张卡越过别人，也算越过，同样能再掷一次 */
   } else if(cardKey==='qiaoshan'){
     /* 无视距离，直接锁定当前排名第一的玩家（排除自己——如果自己就是第一，改打第二名） */
@@ -457,7 +465,6 @@ function performRoll(data, p, base, extraNotes){
   if(moneyGain>0) msg += '，获得 '+moneyGain+' 元';
   data.log = pushLog(data.log, msg);
   checkWinCondition(data, p);
-  checkMilestone80(data, p);
 
   if(!checkWenjinguanOvertake(data, p, beforePos)){
     data.turnState.rolled = true;
@@ -481,10 +488,17 @@ export function mutEndTurn(data, playerId){
   data.turnIndex = adv.idx;
   data.turnState = {rolled:false, skillUsed:false, lastRoll:null};
   if(adv.wrapped){
-    /* 新的一轮开始：所有玩家同时获得这一轮的金钱和卡牌 */
+    /* 新的一轮开始：先盘点一下这一轮结束时是否有人率先冲到全程80%（决定接下来
+       商店的奇袭卡权重），再让所有玩家同时获得这一轮的金钱和卡牌、商店也自动
+       刷新成全新的5张（不占用"换一批"的次数/费用，纯粹是新的一轮开始了）。 */
     data.round = (data.round||1) + 1;
-    data.players.forEach(function(pl){ grantRoundResources(data, pl.id); });
-    data.log = pushLog(data.log, '第 '+data.round+' 轮开始，所有玩家同时获得资源');
+    checkMilestone80AtRoundEnd(data);
+    data.players.forEach(function(pl){
+      grantRoundResources(data, pl.id);
+      var milestoneBoost = !!data.milestone80PlayerId && data.milestone80PlayerId!==pl.id;
+      pl.storeOffer = genStoreOffer(data.round, milestoneBoost);
+    });
+    data.log = pushLog(data.log, '第 '+data.round+' 轮开始，所有玩家同时获得资源，商店已自动刷新');
   }
   grantTurnStart(data, data.turnOrder[adv.idx]);
   data.log = pushLog(data.log, '轮到 '+nameOf(data,data.turnOrder[adv.idx])+' 的回合');

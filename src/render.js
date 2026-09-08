@@ -2,17 +2,23 @@
 /* 纯字符串拼 HTML 再整体替换，没有用框架。这里的函数只读 app.js 里的运行时状态
    （db / myRoom / game / myId / ui），不直接修改它们（除了 renderHome 里给输入框绑事件）。 */
 
-import { HEROES, CARDS, PLAYER_COLORS, WIN_POS, STORE_REFRESH_PRICES, SELL_PRICE_FOR_30, SELL_PRICE_DEFAULT } from './data.js';
+import { HEROES, HERO_TYPE_ORDER, CARDS, PLAYER_COLORS, WIN_POS, STORE_REFRESH_PRICES, SELL_PRICE_FOR_30, SELL_PRICE_DEFAULT } from './data.js';
 import { esc } from './utils.js';
 import { findPlayer, isCurrentTurn } from './game-logic.js';
 import { runtime, paramRoom } from './app-state.js';
 
-export function heroCardHtml(key, selected){
-  var h=HEROES[key];
-  return '<div class="hero-pick'+(selected?' selected':'')+'" data-action="pick-hero" data-hero="'+key+'">'+
-    '<div class="hname">'+h.name+'</div>'+
-    '<div class="hskill"><b style="color:var(--ivory)">主动·'+h.activeName+'</b>：'+h.activeDesc+'<br><b style="color:var(--ivory)">'+h.passiveName+'</b>：'+h.passiveDesc+'</div>'+
-  '</div>';
+/* 选英雄界面按"流派"分组，只显示名字，省地方——具体技能数值/效果说明在
+   游戏内的"规则说明"里能查到，选英雄这一步不需要把长描述都摊开。 */
+export function heroGridHtml(selectedKey){
+  return HERO_TYPE_ORDER.map(function(type){
+    var heroesOfType = Object.keys(HEROES).filter(function(k){ return HEROES[k].type===type; });
+    if(heroesOfType.length===0) return '';
+    return '<div class="hero-type-row"><span class="hero-type-label">'+esc(type)+'</span>'+
+      heroesOfType.map(function(k){
+        return '<button class="hero-name-btn'+(selectedKey===k?' selected':'')+'" data-action="pick-hero" data-hero="'+k+'">'+esc(HEROES[k].name)+'</button>';
+      }).join('')+
+    '</div>';
+  }).join('');
 }
 
 export function buffChipsHtml(p){
@@ -87,7 +93,6 @@ export function renderHome(app){
   var ui=runtime.ui;
   var initial = paramRoom();
   var isJoin = ui.homeMode==='join' || !!initial;
-  var heroOpts = Object.keys(HEROES).map(function(k){ return heroCardHtml(k, ui.selectedHero===k); }).join('');
 
   var html = '<div class="topline"><h1 class="brush">凌云棋局</h1><div class="tag">Airplane Chess · 英雄卡牌对战 · 2-4人</div></div>';
   html += '<div class="home-wrap"><div class="card-panel"><div class="stack">';
@@ -100,7 +105,7 @@ export function renderHome(app){
     html += '<label class="field">房间号<input type="text" id="codeInput" placeholder="例如 A7QK9" maxlength="8" style="letter-spacing:.2em;text-transform:uppercase" value="'+esc(initial)+'"></label>';
   }
   html += '<div class="section-title">选择英雄</div>';
-  html += '<div class="hero-grid">'+heroOpts+'</div>';
+  html += '<div class="hero-grid">'+heroGridHtml(ui.selectedHero)+'</div>';
   if(isJoin){
     html += '<button class="btn btn-gold" data-action="join-room"'+(ui.joining?' disabled':'')+'>'+(ui.joining?'加入中…':'加入房间')+'</button>';
   } else {
@@ -183,21 +188,7 @@ export function renderGame(app){
   if(storeMode){
     html+=storePanelHtml(me);
   } else {
-    html+=boardHtml(game);
-    html+='<div class="card-panel">';
-    html+='<div class="section-title">骰子</div>';
-    html+='<div class="dice-box">'+diePipsHtml(lr?lr.base:1)+
-      '<div class="roll-summary">'+
-        (lr ? ('本回合：骰子 <b>'+lr.base+'</b> 点 '+(lr.bonus>=0?'+':'')+lr.bonus+' 修正 = <b>'+lr.finalSteps+'</b> 步'+(lr.moneyGain>0?'，获得 <b>'+lr.moneyGain+'</b> 元':'')+(lr.passiveNote?('<br>'+esc(lr.passiveNote)):'')) : '尚未掷骰子')+
-      '</div>'+
-    '</div>';
-    html+='<div class="action-bar" style="margin-top:14px">'+
-      '<button class="btn btn-cinnabar" data-action="roll-dice"'+((myTurn && !game.turnState.rolled && game.status==='playing')?'':' disabled')+'>掷骰子</button>'+
-      '<button class="btn" data-action="use-skill"'+(skillDisabled?' disabled':'')+'>'+skillLabel+'</button>'+
-      '<button class="btn btn-gold" data-action="end-turn"'+((myTurn && game.status==='playing')?'':' disabled')+'>结束回合</button>'+
-    '</div>';
-    html+='</div>';
-
+    /* 规则说明放在最上面，不用滚到最下面才能看 */
     html+='<div class="card-panel">';
     html+='<details class="rules"><summary>规则说明</summary>'+
       '<div class="rsec"><b>目标</b>：率先到达第40格获胜。</div>'+
@@ -224,6 +215,21 @@ export function renderGame(app){
       '<div class="rsec"><b>叨叨不叨叨</b>（商店价15元）：销毁一名玩家手牌中随机1张卡牌，对方没有任何补偿。&nbsp; <b>狮吼正声</b>（商店价30元，奇袭）：无视距离，直接对当前排名第一的玩家（自己是第一则改打第二名）发起奇袭，命中后目标跳过下一回合并倒退5格；同样可被无相金身格挡、对保护状态中的玩家无效。</div>'+
       '<div class="rsec"><b>敲山震虎</b>（商店价20元，奇袭）：无视距离，锁定当前排名第一的玩家（自己是第一则改打第二名），使其跳过下一回合；同样可被无相金身格挡、对保护状态中的玩家无效。只有在场上有玩家率先冲到全程80%之后，商店才会上架这张卡。</div>'+
     '</details>';
+    html+='</div>';
+
+    html+=boardHtml(game);
+    html+='<div class="card-panel">';
+    html+='<div class="section-title">骰子</div>';
+    html+='<div class="dice-box">'+diePipsHtml(lr?lr.base:1)+
+      '<div class="roll-summary">'+
+        (lr ? ('本回合：骰子 <b>'+lr.base+'</b> 点 '+(lr.bonus>=0?'+':'')+lr.bonus+' 修正 = <b>'+lr.finalSteps+'</b> 步'+(lr.moneyGain>0?'，获得 <b>'+lr.moneyGain+'</b> 元':'')+(lr.passiveNote?('<br>'+esc(lr.passiveNote)):'')) : '尚未掷骰子')+
+      '</div>'+
+    '</div>';
+    html+='<div class="action-bar" style="margin-top:14px">'+
+      '<button class="btn btn-cinnabar" data-action="roll-dice"'+((myTurn && !game.turnState.rolled && game.status==='playing')?'':' disabled')+'>掷骰子</button>'+
+      '<button class="btn" data-action="use-skill"'+(skillDisabled?' disabled':'')+'>'+skillLabel+'</button>'+
+      '<button class="btn btn-gold" data-action="end-turn"'+((myTurn && game.status==='playing')?'':' disabled')+'>结束回合</button>'+
+    '</div>';
     html+='</div>';
   }
   html+='</div>'; // board-area

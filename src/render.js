@@ -90,8 +90,10 @@ export function storePanelHtml(me){
   html+=offer.map(function(key){
     var cd=CARDS[key];
     var can = me && me.money>=cd.price;
-    return '<div class="hand-card"><div class="cname">'+cd.name+'</div><div class="cdesc">'+cd.desc+'</div>'+
-      '<div class="cfoot"><span class="price-tag">'+cd.price+' 元</span>'+
+    /* 卡牌说明不再常驻显示，占地方——完整效果放进 title，鼠标悬停/长按能看到，
+       想细看的话"规则说明"里也有全套列表。 */
+    return '<div class="hand-card" title="'+esc(cd.desc)+'"><div class="cfoot"><span class="cname">'+esc(cd.name)+'</span>'+
+      '<span class="price-tag">'+cd.price+' 元</span>'+
       '<button class="btn btn-small btn-gold" data-action="buy-card" data-key="'+key+'"'+(can?'':' disabled')+'>购买</button></div></div>';
   }).join('');
   html+='</div>';
@@ -223,9 +225,9 @@ export function renderGame(app){
       '<div class="rsec"><b>孤云</b>——主动·大道无为（冷却2回合）：朝场上（除自己以外）最靠近终点的玩家靠近——相距≤6格则直接到达对方所在格，否则朝对方方向移动6格；如果自己已经是全场第一，则会转而朝落后自己最多的那名对手移动，方向可能是往回走。移动后立刻获得一张凌虚一指；被动：落后领先者3-4格+2步，5-9格+5步，10格以上+7步。</div>'+
       '<div class="rsec"><b>文津馆</b>——主动·运筹帷幄（冷却1回合，相当于每轮到自己都能用）：投两次骰子取较大值作为本回合点数；被动：本回合移动越过了某名玩家的位置，可以再掷一次骰子，只要还在越过别人就能连续触发。</div>'+
       '<div class="rsec"><b>狂澜</b>——主动·军威赫赫：对前后6格内所有玩家发起奇袭（可被无相金身格挡、保护状态免疫），被扫到的玩家无论是否命中都会随机失去自身一项效果；若无人被真正命中，下回合仍可再用，命中则2回合冷却并前进6格；被动：每次使用主动技能，自己 +3 步（用于紧接着的下一次掷骰子）。</div>'+
-      '<div class="rsec"><b>青溪</b>——主动·坐看云起（冷却2回合）：获得一张【妙手回春】；被动：（预留给未来的组队模式）队友被奇袭命中时可以由自己代付15元或1张卡牌替队友承担，同一轮内队友多次被命中代价翻倍，队友金钱/卡牌不足时不触发——当前单人混战模式下暂不生效。</div>'+
+      '<div class="rsec"><b>青溪</b>——主动·坐看云起（冷却2回合）：获得一张【妙手回春】，使用后自动对自己生效；被动：（预留给未来的组队模式）队友被奇袭命中时可以由自己代付15元或1张卡牌替队友承担，同一轮内队友多次被命中代价翻倍，队友金钱/卡牌不足时不触发——当前单人混战模式下暂不生效。</div>'+
       '<div class="rsec"><b>墨山道</b>——主动·兼爱非攻（冷却2回合）：自己获得2张随机卡牌（未来组队模式下队友也会同时获得2张）；被动：这一轮里打出过的卡牌种类数转化为掷骰步数加成，1种+1步，2种及以上+2步（本回合封顶+2步；未来组队模式下会把队友打出的种类也算进来）。</div>'+
-      '<div class="rsec"><b>梨园</b>——主动·请君打榜（冷却1回合，相当于每次轮到自己都能用）：随机从一名敌方玩家身上偷取15元或1张随机卡牌（各50%概率，对方没有卡牌时改为偷钱）；被动：落后当前第一名超过5格时 +4 步，自己就是第一名时不触发。</div>'+
+      '<div class="rsec"><b>梨园</b>——主动·请君打榜（冷却2回合）：随机从一名敌方玩家身上偷取15元或1张随机卡牌（各50%概率，对方缺哪样就改偷另一样，两样都没有则一无所获）；被动：落后当前第一名超过5格时 +4 步，自己就是第一名时不触发。</div>'+
       '<div class="rsec"><b>阴阳迷踪步</b>（商店价20元）：自身 +5 步，持续2回合。&nbsp; <b>生财有道</b>（商店价15元）：按最终步数获得金钱，持续2回合。</div>'+
       '<div class="rsec"><b>清风霁月</b>（商店价15元）：解除自身一项减益。&nbsp; <b>金玉手</b>（商店价15元）：使目标玩家 -3 步。</div>'+
       '<div class="rsec"><b>被动卡牌</b>：无相金身、好兆骰这两张卡不需要主动使用，只要留在口袋（手牌）里就一直生效；被消耗（无相金身格挡奇袭）或卖出后才会失效。</div>'+
@@ -239,7 +241,7 @@ export function renderGame(app){
       '<div class="rsec"><b>敲山震虎</b>（商店价20元，奇袭）：无视距离，锁定当前排名第一的玩家（自己是第一则改打第二名），使其跳过下一回合；同样可被防住、对保护状态中的玩家无效。只有在场上有玩家率先冲到全程80%之后，商店才会上架这张卡。</div>'+
       '<div class="rsec"><b>破釜沉舟</b>（商店价15元）：立即花费20元，获得2张凌虚一指（第3轮起才常见）。&nbsp; <b>一掷千金</b>（商店价20元）：押上全部身家，花光当前金钱，前进（花掉的钱÷5）步，最多15步。</div>'+
       '<div class="rsec"><b>散财消灾</b>（商店价20元，被动）：留在口袋里时，被奇袭命中会改为损失20元、不会跳过回合（优先级高于无相金身）；若金钱不足20元则这张卡不生效，本次奇袭正常命中；触发一次就消耗掉。&nbsp; <b>千里目</b>（商店价30元，被动）：留在口袋里时，自己发起的凌虚一指奇袭距离额外 +2 格。</div>'+
-      '<div class="rsec"><b>妙手回春</b>（无法在商店购买，只能通过青溪的【坐看云起】获得）：对一名玩家使用（可以是自己）——若对方当前没有减益，获得 +4 步增益（持续2回合）；若对方有减益，则清除其所有减益，并改为获得 +2 步增益（持续2回合）。</div>'+
+      '<div class="rsec"><b>妙手回春</b>（无法在商店购买，只能通过青溪的【坐看云起】获得）：使用后立即对自己生效（单人混战模式没有队友，不用挑目标）——若自己当前没有减益，获得 +4 步增益（持续2回合）；若自己有减益，则清除所有减益，并改为获得 +2 步增益（持续2回合）。</div>'+
       '<div class="rsec"><b>特殊格子</b>：棋盘上有12种特殊效果，每种随机落在一个格子上（紫色边框、有小标记），不管是自己走到的还是被打过去的，只要停在那一格就会触发：'+
         '<b>无相皇</b>——下一回合无法使用主动技能（可被清风霁月解除）；'+
         '<b>千夜</b>——接下来2回合 -3 步（可被清风霁月解除）；'+
@@ -289,12 +291,13 @@ export function renderGame(app){
       var canUse = myTurn && game.status==='playing' && !(cd.surpriseAttack && taipingBanned);
       var sellPrice = cd.price===30 ? SELL_PRICE_FOR_30 : SELL_PRICE_DEFAULT;
       var lockedNote = (cd.surpriseAttack && taipingBanned) ? ' <span style="font-size:.62rem;color:var(--danger);font-weight:400">（太平钟楼效应，本轮禁用）</span>' : '';
-      return '<div class="hand-card"><div class="cname">'+cd.name+(cd.passive?' <span style="font-size:.62rem;color:var(--ivory-dim);font-weight:400">（被动·留在口袋里生效）</span>':lockedNote)+'</div><div class="cdesc">'+cd.desc+'</div>'+
-        '<div class="cfoot"><span class="price-tag">商店价 '+cd.price+' 元</span>'+
-        '<div style="display:flex;gap:6px">'+
+      /* 卡牌说明不再常驻显示，占地方——完整效果放进 title，鼠标悬停/长按能看到，
+         想细看的话"规则说明"里也有全套列表；被动/被禁用这类简短提示还是留着，
+         不是完整说明，占不了多少地方。 */
+      return '<div class="hand-card" title="'+esc(cd.desc)+'"><div class="cfoot"><span class="cname">'+esc(cd.name)+(cd.passive?' <span style="font-size:.62rem;color:var(--ivory-dim);font-weight:400">（被动）</span>':lockedNote)+'</span>'+
           '<button class="btn btn-small" data-action="sell-card" data-uid="'+c.uid+'">卖出 +'+sellPrice+'</button>'+
           (cd.passive ? '' : '<button class="btn btn-small btn-gold" data-action="play-card" data-uid="'+c.uid+'" data-key="'+c.key+'"'+(canUse?'':' disabled')+'>使用</button>')+
-        '</div></div></div>';
+        '</div></div>';
     }).join('');
     html+='</div></div>';
   }
@@ -350,7 +353,7 @@ export function renderGame(app){
       me.hand.map(function(c){
         var cd2=CARDS[c.key];
         var picked = sel.indexOf(c.uid)>-1;
-        return '<div class="hand-card'+(picked?' selected':'')+'" data-action="toggle-discard-card" data-uid="'+c.uid+'" style="cursor:pointer"><div class="cname">'+esc(cd2.name)+'</div><div class="cdesc">'+esc(cd2.desc)+'</div></div>';
+        return '<div class="hand-card'+(picked?' selected':'')+'" data-action="toggle-discard-card" data-uid="'+c.uid+'" title="'+esc(cd2.desc)+'" style="cursor:pointer"><div class="cname">'+esc(cd2.name)+'</div></div>';
       }).join('')+
     '</div><button class="btn btn-gold" data-action="confirm-discard"'+(sel.length===needCount?'':' disabled')+' style="margin-top:10px">确认弃置</button></div></div>';
   } else if(game.pendingDiscard && game.pendingDiscard.playerId!==myId){

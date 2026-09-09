@@ -159,7 +159,9 @@ function applyTianquanPassiveIfTriggered(data, target, lostAmount){
    抽成共用函数。返回是否触发了"再掷一次"。 */
 function checkWenjinguanOvertake(data, p, beforePos){
   if(p.hero!=='wenjinguan' || data.status!=='playing') return false;
-  var overtook = data.players.some(function(o){ return o.id!==p.id && beforePos<=o.position && p.position>o.position; });
+  /* o.position>0：越过一个还停在起点（0格）的玩家不算——开局所有人都堆在0格，
+     否则任何人一动就会"越过"一堆还没走的玩家，等于每次都白送一次再掷。 */
+  var overtook = data.players.some(function(o){ return o.id!==p.id && o.position>0 && beforePos<=o.position && p.position>o.position; });
   if(overtook){
     data.turnState.rolled = false;
     data.log = pushLog(data.log, p.name+' 凭借【运筹帷幄】被动越过了对手，可以再掷一次骰子');
@@ -423,28 +425,35 @@ export function mutUseSkill(data, playerId, targetId){
   } else if(p.hero==='liyuan'){
     var lyTargets=data.players.filter(function(o){ return o.id!==p.id; });
     var lyTarget=lyTargets[Math.floor(Math.random()*lyTargets.length)];
-    var lyStealCard = Math.random()<0.5;
-    if(lyStealCard && lyTarget.hand.length===0) lyStealCard=false; /* 对方没牌可偷，退回偷钱 */
+    var lyHasCards = lyTarget.hand.length>0;
+    var lyHasMoney = lyTarget.money>0;
+    /* 双向兜底：只有两种都有才真的抛硬币决定；只有一种就直接用那一种；
+       两种都没有就什么都拿不到——分开算清楚，不用"半路改主意"的写法，
+       避免"改主意"改到一个其实也没有的选项上（那样会去偷一手空手牌）。 */
+    var lyStealCard = (lyHasCards && lyHasMoney) ? (Math.random()<0.5) : lyHasCards;
     if(lyStealCard){
       var lyIdx=Math.floor(Math.random()*lyTarget.hand.length);
       var lyCard=lyTarget.hand.splice(lyIdx,1)[0];
       p.hand.push(lyCard);
       data.log = pushLog(data.log, p.name+' 使用【请君打榜】，从 '+lyTarget.name+' 手里偷走了一张卡牌（内容对其他人保密）');
-    } else {
+    } else if(lyHasMoney){
       var lyMoney=Math.min(15, lyTarget.money);
       lyTarget.money -= lyMoney;
       p.money += lyMoney;
       data.log = pushLog(data.log, p.name+' 使用【请君打榜】，从 '+lyTarget.name+' 那里偷走了 '+lyMoney+' 元');
       applyTianquanPassiveIfTriggered(data, lyTarget, lyMoney);
+    } else {
+      data.log = pushLog(data.log, p.name+' 使用【请君打榜】，但 '+lyTarget.name+' 既没有钱也没有卡牌，一无所获');
     }
   } else {
     return {error:'该英雄暂无主动技能'};
   }
   data.turnState.skillUsed = true;
   /* 冷却时间因人而异：狂澜由自己的分支决定（是否有人被真正命中）；
-     文津馆、梨园冷却只有1回合，等于"每次轮到自己都能用"；其余英雄默认2回合。 */
+     文津馆冷却只有1回合，等于"每次轮到自己都能用"；其余英雄默认2回合
+     （梨园、青溪、墨山道都是每2回合用一次）。 */
   if(p.hero==='kuanglan'){ /* 已在上面分支里设置过 */ }
-  else if(p.hero==='wenjinguan' || p.hero==='liyuan'){ p.skillCooldown = 1; }
+  else if(p.hero==='wenjinguan'){ p.skillCooldown = 1; }
   else { p.skillCooldown = 2; }
   return {data:data};
 }
@@ -577,19 +586,20 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
     resolveGridEffect(data, p);
     checkWenjinguanOvertake(data, p, beforePosYZ);
   } else if(cardKey==='miaoshouhuichun'){
-    /* 唯一一张可以选自己当目标的卡（组队模式还没做，暂时只能帮自己或场上任意其他人，
-       以后有队友概念了，通常会用来救队友） */
-    if(!targetId) return {error:'请选择目标玩家'};
-    var tMSHC=findPlayer(data,targetId);
+    /* 单人混战模式没有队友，固定对自己生效，不用挑目标（needsTarget:false，
+       app.js 那边也不会传 targetId 进来）；以后做了组队模式，这里已经支持传入
+       一个明确的 targetId（帮队友），逻辑不用改，只需要把卡改回 needsTarget:true。 */
+    var tMSHC = targetId ? findPlayer(data,targetId) : p;
     if(!tMSHC) return {error:'目标无效'};
     var hasDebuffMSHC = tMSHC.buffs.some(function(b){ return (b.type==='STEP_PENALTY'||b.type==='SKIP_TURN'||b.type==='SKILL_LOCKED') && b.turnsLeft>0; });
+    var mshcSelf = tMSHC.id===p.id;
     if(hasDebuffMSHC){
       tMSHC.buffs = tMSHC.buffs.filter(function(b){ return !((b.type==='STEP_PENALTY'||b.type==='SKIP_TURN'||b.type==='SKILL_LOCKED') && b.turnsLeft>0); });
       addBuff(tMSHC,'STEP_BONUS',2,2,'card:miaoshouhuichun','妙手回春');
-      data.log = pushLog(data.log, p.name+' 对 '+tMSHC.name+' 使用【妙手回春】，清除了对方所有减益，并获得 +2 步增益（持续2回合）');
+      data.log = pushLog(data.log, mshcSelf ? (p.name+' 使用【妙手回春】，清除了自己所有减益，并获得 +2 步增益（持续2回合）') : (p.name+' 对 '+tMSHC.name+' 使用【妙手回春】，清除了对方所有减益，并获得 +2 步增益（持续2回合）'));
     } else {
       addBuff(tMSHC,'STEP_BONUS',4,2,'card:miaoshouhuichun','妙手回春');
-      data.log = pushLog(data.log, p.name+' 对 '+tMSHC.name+' 使用【妙手回春】，获得 +4 步增益（持续2回合）');
+      data.log = pushLog(data.log, mshcSelf ? (p.name+' 使用【妙手回春】，获得 +4 步增益（持续2回合）') : (p.name+' 对 '+tMSHC.name+' 使用【妙手回春】，获得 +4 步增益（持续2回合）'));
     }
   } else {
     return {error:'未知卡牌'};

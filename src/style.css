@@ -164,11 +164,12 @@ label.field{ display:flex; flex-direction:column; gap:6px; font-size:.8rem; colo
 
 .side-panel{ display:flex; flex-direction:column; gap:14px; }
 .action-bar{ display:flex; gap:8px; flex-wrap:wrap; }
-.hand-grid{ display:flex; flex-direction:column; gap:6px; }
-.hand-card{ border:1px solid var(--line-strong); border-radius:9px; padding:7px 10px; background:rgba(0,0,0,0.16); }
-.hand-card .cname{ font-weight:700; color:var(--gold); font-size:.82rem; }
-.hand-card .cdesc{ font-size:.66rem; color:var(--ivory-dim); margin:2px 0 5px; line-height:1.35; }
-.hand-card .cfoot{ display:flex; justify-content:space-between; align-items:center; }
+.hand-grid{ display:flex; flex-direction:column; gap:5px; }
+/* 卡牌不再常驻显示效果说明（占地方）——完整效果放进 title 属性，鼠标悬停/
+   长按能看到；卡面缩成一行：名字 + 价格/按钮。 */
+.hand-card{ border:1px solid var(--line-strong); border-radius:8px; padding:6px 8px; background:rgba(0,0,0,0.16); }
+.hand-card .cname{ font-weight:700; color:var(--gold); font-size:.8rem; }
+.hand-card .cfoot{ display:flex; justify-content:space-between; align-items:center; gap:6px; flex-wrap:wrap; }
 .price-tag{ font-size:.68rem; color:var(--ivory-dim); }
 
 /* 横幅播报：屏幕顶部滚动显示最新一条对局动态（谁用了什么卡/技能、掷出了几步），

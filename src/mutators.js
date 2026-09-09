@@ -2,24 +2,81 @@
 /* 每个 mutator 接收克隆后的 game 数据，返回 {data} 表示成功写回，或 {error} 表示失败（不写回）。
    加新效果基本就是在这几个函数里加分支。 */
 
-import { HEROES, CARDS, WIN_POS, STORE_REFRESH_PRICES, SELL_PRICE_FOR_30, SELL_PRICE_DEFAULT, MILESTONE_RATIO } from './data.js';
+import { HEROES, CARDS, WIN_POS, STORE_REFRESH_PRICES, SELL_PRICE_FOR_30, SELL_PRICE_DEFAULT, MILESTONE_RATIO, GRID_EFFECT_DEFS, GRID_EFFECT_KEYS } from './data.js';
 import { shuffle, uid } from './utils.js';
 import {
   findPlayer, nameOf, isCurrentTurn, sumBuff, addBuff, tickBuffs,
   pushLog, drawCard, newPlayer, grantTurnStart, grantRoundResources, genStoreOffer
 } from './game-logic.js';
 
-/* 直接把玩家移动若干步（不经过骰子/buff 加成计算），供掷骰子和"凌云踏"这类
-   立即位移的卡牌共用；胜负判定单独抽成 checkWinCondition，移动后调用即可。 */
+/* 直接把玩家移动若干步（不经过骰子/buff 加成计算），供掷骰子、"凌云踏"这类
+   立即位移的卡牌、以及"张万师"格子效果的倒退共用；两头都夹住（0 到 WIN_POS），
+   倒退也不会走到负数格。胜负判定单独抽成 checkWinCondition，移动后调用即可。 */
 function applyMovement(p, steps){
-  p.position = Math.min(WIN_POS, p.position+steps);
+  p.position = Math.max(0, Math.min(WIN_POS, p.position+steps));
 }
 function checkWinCondition(data, p){
   if(p.position>=WIN_POS && data.status==='playing'){
     data.status='finished';
     data.winner=p.id;
-    data.log = pushLog(data.log, '🏆 '+p.name+' 抵达第40格终点，获得胜利！');
+    data.log = pushLog(data.log, '🏆 '+p.name+' 抵达第'+WIN_POS+'格终点，获得胜利！');
   }
+}
+
+/* 特殊格子效果——落在哪一格是每局开局时随机分配好的（见 mutStart 里的
+   data.gridEffects），不管是自己掷骰子走到的、还是被某张卡/技能送过去的
+   （比如被"狮吼正声"打退到了一个特殊格上），只要最终停在这一格就会触发。
+   效果解析完就结束，不会因为效果本身又造成的移动（比如"张万师"的倒退）
+   继续连锁检查下一个格子——避免极端情况下的连锁/死循环。 */
+function resolveGridEffect(data, p){
+  if(data.status!=='playing') return;
+  var effectKey = data.gridEffects && data.gridEffects[p.position];
+  var def = effectKey && GRID_EFFECT_DEFS[effectKey];
+  if(!def) return;
+  if(effectKey==='wuxianghuang'){
+    addBuff(p,'SKILL_LOCKED',0,1,'grid:wuxianghuang','无相皇');
+    data.log = pushLog(data.log, p.name+' 踩到【无相皇】，下一回合无法使用主动技能（可被清风霁月解除）');
+  } else if(effectKey==='qianye'){
+    addBuff(p,'STEP_PENALTY',3,2,'grid:qianye','千夜');
+    data.log = pushLog(data.log, p.name+' 踩到【千夜】，接下来2回合 -3 步（可被清风霁月解除）');
+  } else if(effectKey==='zhangwanshi'){
+    var d = 1+Math.floor(Math.random()*6);
+    applyMovement(p, -d);
+    data.log = pushLog(data.log, p.name+' 踩到【张万师】，掷出 '+d+' 点并倒退了 '+d+' 格（到达第'+p.position+'格）');
+  } else if(effectKey==='taipingzhonglou'){
+    /* 用一个"从第几轮到第几轮"的区间记封禁，而不是单个"封禁到第几轮"的上限——
+       单纯用上限的话，"当前轮数 <= 上限"这个判断在刚触发的那一轮就已经成立
+       （毕竟这一轮的轮数总是小于"下一轮"），会把触发的这一轮也误判成被封禁。
+       用区间就能精确表达"只封下一轮"：如果现在还没在封禁中，开一个新区间
+       [下一轮, 下一轮]；如果现在已经处于封禁中（这一轮又被踩中），把区间的
+       结束往后延一轮，不动开始，这样正在生效的封禁不会被这次触发提前解除。 */
+    if(isSurpriseAttackBanned(data)){
+      data.taipingBanUntil += 1;
+    } else {
+      data.taipingBanFrom = data.round+1;
+      data.taipingBanUntil = data.round+1;
+    }
+    data.log = pushLog(data.log, p.name+' 踩到【太平钟楼】，下一轮全场禁止使用奇袭类卡牌和执锐系主动技能');
+  } else if(effectKey==='changpingcang'){
+    data.players.forEach(function(pl){ pl.money += 50; });
+    data.log = pushLog(data.log, p.name+' 踩到【常平仓】，所有玩家获得50元');
+  } else if(effectKey==='guishi'){
+    for(var i=0;i<2;i++){
+      var others = data.players.filter(function(o){ return o.id!==p.id && o.hand.length>0; });
+      if(others.length===0) break;
+      var victim = others[Math.floor(Math.random()*others.length)];
+      var stealIdx = Math.floor(Math.random()*victim.hand.length);
+      p.hand.push(victim.hand.splice(stealIdx,1)[0]);
+    }
+    data.log = pushLog(data.log, p.name+' 踩到【鬼市】，随机偷走了2张卡牌（内容对其他人保密）');
+  } else if(effectKey==='chongyuandian'){
+    addBuff(p,'STEP_BONUS',5,1,'grid:chongyuandian','崇元殿');
+    data.log = pushLog(data.log, p.name+' 踩到【崇元殿】，下一次掷骰额外 +5 步');
+  }
+}
+
+function isSurpriseAttackBanned(data){
+  return data.taipingBanUntil!=null && data.round>=data.taipingBanFrom && data.round<=data.taipingBanUntil;
 }
 
 /* 每一轮结束时（回合顺序绕回第一个玩家）检查一次：是否已经有玩家的位置达到了
@@ -177,6 +234,18 @@ function applyTianquanStartingBonus(data){
   });
 }
 
+/* 把 GRID_EFFECT_KEYS 里的每种效果随机分配到棋盘上一个格子（排除起点0和终点
+   WIN_POS），每种效果目前只出现一次，具体落在哪一格每局都不一样。 */
+function generateGridEffects(){
+  var candidatePositions = [];
+  for(var i=1;i<WIN_POS;i++){ candidatePositions.push(i); }
+  var positions = shuffle(candidatePositions).slice(0, GRID_EFFECT_KEYS.length);
+  var effects = shuffle(GRID_EFFECT_KEYS);
+  var map = {};
+  positions.forEach(function(pos, idx){ map[pos] = effects[idx]; });
+  return map;
+}
+
 export function mutStart(data, requesterId){
   if(data.hostId!==requesterId) return {error:'只有房主可以开始游戏'};
   if(data.status!=='lobby') return {error:'游戏已经开始'};
@@ -187,6 +256,7 @@ export function mutStart(data, requesterId){
   data.turnIndex = 0;
   data.status = 'playing';
   data.round = 1;
+  data.gridEffects = generateGridEffects();
   data.turnState = {rolled:false, skillUsed:false, lastRoll:null};
   /* 第一轮开始：所有玩家同时获得这一轮的金钱和卡牌，商店也按第1轮的权重刷新一次
      （不是等到各自的回合才发，也不是沿用大厅里的初始商店） */
@@ -209,6 +279,12 @@ export function mutUseSkill(data, playerId, targetId){
   var hero=HEROES[p.hero];
   if(!hero) return {error:'尚未选择英雄'};
   if(p.skillCooldown>0) return {error:'技能冷却中，还需 '+p.skillCooldown+' 回合后才能使用'};
+  if(p.buffs.some(function(b){ return b.type==='SKILL_LOCKED' && b.turnsLeft>0; })){
+    return {error:'无相皇效应：本回合无法使用主动技能'};
+  }
+  if(hero.type==='执锐' && isSurpriseAttackBanned(data)){
+    return {error:'太平钟楼效应：这一轮执锐系主动技能被禁止使用'};
+  }
   if(p.hero==='tianquan'){
     if(p.money<20) return {error:'金钱不足，千金取义需要20元'};
     p.money -= 20;
@@ -230,6 +306,7 @@ export function mutUseSkill(data, playerId, targetId){
     p.hand.push({uid:uid(), key:'lingxu'});
     data.log = pushLog(data.log, p.name+' 使用【大道无为】，向 '+leader.name+' 靠近（到达第'+p.position+'格），并获得一张【凌虚一指】');
     checkWinCondition(data,p);
+    resolveGridEffect(data,p);
   } else if(p.hero==='wenjinguan'){
     var d1=1+Math.floor(Math.random()*6), d2=1+Math.floor(Math.random()*6);
     performRoll(data, p, Math.max(d1,d2), ['运筹帷幄：两次骰子分别为'+d1+'和'+d2+'，取较大值']);
@@ -266,6 +343,7 @@ export function mutUseSkill(data, playerId, targetId){
       applyMovement(p,6);
       data.log = pushLog(data.log, p.name+' 本次奇袭有玩家被真正命中，向前推进6格（到达第'+p.position+'格）');
       checkWinCondition(data,p);
+      resolveGridEffect(data,p);
     } else {
       p.skillCooldown=0;
       data.log = pushLog(data.log, p.name+' 本次奇袭无人被真正命中，下一回合仍可再次使用【军威赫赫】');
@@ -291,10 +369,17 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
   var cardKey=p.hand[idx].key;
   var card=CARDS[cardKey];
   if(card && card.passive) return {error:'该卡牌是被动效果，留在口袋里即可自动生效，无需主动使用'};
+  if(card && card.surpriseAttack && isSurpriseAttackBanned(data)){
+    return {error:'太平钟楼效应：这一轮奇袭类卡牌被禁止使用'};
+  }
   /* 卡牌的 price 是商店购买价，已经在口袋里的卡牌打出来不再收费 */
   if(cardKey==='qingfeng'){
     var dIdx=-1;
-    for(var j=0;j<p.buffs.length;j++){ if(p.buffs[j].type==='STEP_PENALTY' && p.buffs[j].turnsLeft>0){ dIdx=j; break; } }
+    /* 无相皇（SKILL_LOCKED）、千夜（STEP_PENALTY）都能被这张卡解除，找到哪个
+       算哪个（"解除自身一项减益"，不是全解）。 */
+    for(var j=0;j<p.buffs.length;j++){
+      if((p.buffs[j].type==='STEP_PENALTY' || p.buffs[j].type==='SKILL_LOCKED') && p.buffs[j].turnsLeft>0){ dIdx=j; break; }
+    }
     if(dIdx===-1) return {error:'当前没有可解除的减益'};
     var removed=p.buffs[dIdx];
     p.buffs.splice(dIdx,1);
@@ -362,9 +447,10 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
       data.log = pushLog(data.log, p.name+' 对 '+top.name+' 使用【狮吼正声】，但被对方的【无相金身】格挡了');
     } else {
       addBuff(top,'SKIP_TURN',0,1,'card:shihou','狮吼正声');
-      top.position = Math.max(0, top.position-5);
+      applyMovement(top, -5);
       data.log = pushLog(data.log, p.name+' 对 '+top.name+' 使用【狮吼正声】，命中！对方将跳过下一回合，并倒退5格（到达第'+top.position+'格）');
       onSurpriseAttackSuccess(data, p);
+      resolveGridEffect(data, top); /* 被打退后如果正好落在特殊格上，一样会触发 */
     }
   } else if(cardKey==='lingyun'){
     var amount = payload && payload.jumpAmount;
@@ -373,6 +459,7 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
     applyMovement(p, amount);
     data.log = pushLog(data.log, p.name+' 使用【凌云踏】，向前跳了 '+amount+' 格（到达第 '+p.position+' 格）');
     checkWinCondition(data, p);
+    resolveGridEffect(data, p);
     checkWenjinguanOvertake(data, p, beforePosLY); /* 用这张卡越过别人，也算越过，同样能再掷一次 */
   } else if(cardKey==='qiaoshan'){
     /* 无视距离，直接锁定当前排名第一的玩家（排除自己——如果自己就是第一，改打第二名） */
@@ -481,6 +568,7 @@ function performRoll(data, p, base, extraNotes){
   if(moneyGain>0) msg += '，获得 '+moneyGain+' 元';
   data.log = pushLog(data.log, msg);
   checkWinCondition(data, p);
+  resolveGridEffect(data, p);
 
   if(!checkWenjinguanOvertake(data, p, beforePos)){
     data.turnState.rolled = true;

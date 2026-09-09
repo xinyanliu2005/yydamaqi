@@ -2,7 +2,7 @@
 /* 纯字符串拼 HTML 再整体替换，没有用框架。这里的函数只读 app.js 里的运行时状态
    （db / myRoom / game / myId / ui），不直接修改它们（除了 renderHome 里给输入框绑事件）。 */
 
-import { HEROES, HERO_TYPE_ORDER, CARDS, PLAYER_COLORS, WIN_POS, STORE_REFRESH_PRICES, SELL_PRICE_FOR_30, SELL_PRICE_DEFAULT } from './data.js';
+import { HEROES, HERO_TYPE_ORDER, CARDS, PLAYER_COLORS, WIN_POS, STORE_REFRESH_PRICES, SELL_PRICE_FOR_30, SELL_PRICE_DEFAULT, GRID_EFFECT_DEFS } from './data.js';
 import { esc } from './utils.js';
 import { findPlayer, isCurrentTurn } from './game-logic.js';
 import { runtime, paramRoom } from './app-state.js';
@@ -24,10 +24,11 @@ export function heroGridHtml(selectedKey){
 export function buffChipsHtml(p){
   if(!p.buffs.length) return '';
   return '<div class="buff-row">'+p.buffs.map(function(b){
-    var cls = (b.type==='STEP_PENALTY' || b.type==='SKIP_TURN')?'neg':'pos';
+    var cls = (b.type==='STEP_PENALTY' || b.type==='SKIP_TURN' || b.type==='SKILL_LOCKED')?'neg':'pos';
     var txt = b.type==='STEP_BONUS' ? ('+'+b.value+'步 '+b.label)
       : b.type==='STEP_PENALTY' ? ('-'+b.value+'步 '+b.label)
       : b.type==='SKIP_TURN' ? ('将跳过回合 '+b.label)
+      : b.type==='SKILL_LOCKED' ? ('技能封印 '+b.label)
       : ('生财 '+b.label);
     return '<span class="buff-chip '+cls+'">'+esc(txt)+'（剩'+b.turnsLeft+'回合）</span>';
   }).join('')+'</div>';
@@ -35,16 +36,20 @@ export function buffChipsHtml(p){
 
 export function boardHtml(game){
   var cells=[];
+  var gridEffects = game.gridEffects || {};
   for(var i=0;i<=WIN_POS;i++){
     var row=Math.floor(i/6), posInRow=i%6;
     var col = (row%2===0) ? posInRow : (5-posInRow);
-    var cls='cell'+(i===0?' start':'')+(i===WIN_POS?' finish':'');
+    var effectKey = gridEffects[i];
+    var effectDef = effectKey && GRID_EFFECT_DEFS[effectKey];
+    var cls='cell'+(i===0?' start':'')+(i===WIN_POS?' finish':'')+(effectDef?' effect':'');
     var toksHtml = game.players.map(function(p,idx){
       return p.position===i ? '<span class="tok" style="background:'+PLAYER_COLORS[idx]+'" title="'+esc(p.name)+'">'+esc(p.name.slice(0,1))+'</span>' : '';
     }).join('');
+    var fxHtml = effectDef ? '<span class="grid-fx" title="'+esc(effectDef.name+'：'+effectDef.desc)+'">'+esc(effectDef.short)+'</span>' : '';
     cells.push('<div class="'+cls+'" style="grid-row:'+(row+1)+';grid-column:'+(col+1)+'">'+
       '<div class="num">'+(i===0?'起':(i===WIN_POS?'终':i))+'</div>'+
-      '<div class="tokens">'+toksHtml+'</div>'+
+      '<div class="tokens">'+fxHtml+toksHtml+'</div>'+
     '</div>');
   }
   return '<div class="board">'+cells.join('')+'</div>';
@@ -167,9 +172,15 @@ export function renderGame(app){
   var lr=game.turnState.lastRoll;
   var storeMode = ui.gameTab==='store';
 
-  var skillDisabled = !(myTurn && me && !game.turnState.skillUsed && !game.turnState.rolled && game.status==='playing' && me.skillCooldown<=0);
+  var isSkillLocked = !!(me && me.buffs.some(function(b){ return b.type==='SKILL_LOCKED' && b.turnsLeft>0; }));
+  var heroIsZhirui = !!(me && HEROES[me.hero] && HEROES[me.hero].type==='执锐');
+  var taipingBanned = game.taipingBanUntil!=null && game.round>=game.taipingBanFrom && game.round<=game.taipingBanUntil;
+  var skillDisabled = !(myTurn && me && !game.turnState.skillUsed && !game.turnState.rolled && game.status==='playing' && me.skillCooldown<=0)
+    || isSkillLocked || (heroIsZhirui && taipingBanned);
   var skillLabel = '使用技能'+(me&&HEROES[me.hero]?'：'+HEROES[me.hero].activeName:'');
   if(me && me.skillCooldown>0) skillLabel += '（冷却中，还需'+me.skillCooldown+'回合）';
+  else if(isSkillLocked) skillLabel += '（无相皇效应，本回合无法使用）';
+  else if(heroIsZhirui && taipingBanned) skillLabel += '（太平钟楼效应，本轮禁用）';
 
   var html='<div class="game-wrap">';
   html+='<div class="game-head"><h1 class="brush" style="font-size:1.8rem;margin:0">凌云棋局</h1>'+
@@ -191,7 +202,7 @@ export function renderGame(app){
     /* 规则说明放在最上面，不用滚到最下面才能看 */
     html+='<div class="card-panel">';
     html+='<details class="rules"><summary>规则说明</summary>'+
-      '<div class="rsec"><b>目标</b>：率先到达第40格获胜。</div>'+
+      '<div class="rsec"><b>目标</b>：率先到达第'+WIN_POS+'格获胜。</div>'+
       '<div class="rsec"><b>每一轮开始</b>：所有玩家同时免费获得 30 元和 2 张随机卡牌，直接放进各自口袋，不用花钱（开局是第1轮；之后每当轮完一圈、回到最先手的玩家时，就开始新的一轮，再同时发一次）。</div>'+
       '<div class="rsec"><b>商店</b>：随时可以打开商店，里面随机上架 5 张互不重复的卡牌，花钱买下放进口袋；买过的卡牌会从这一页下架（刷新后可能重新出现）。口袋里不想要的卡牌也可以随时卖出，商店价30元的卡卖'+SELL_PRICE_FOR_30+'元，其余卡卖'+SELL_PRICE_DEFAULT+'元。"换一批"在你本回合开始时第1次免费，第2次5元，之后每次10元。商店里能抽到什么卡是分阶段的：开局前2轮以基础卡/被动卡为主，奇袭类很少见；第3轮起干扰/进攻类卡牌变多；一旦场上有人率先冲到全程80%，其他玩家抽到奇袭卡的概率会提高。</div>'+
       '<div class="rsec"><b>回合流程</b>：可先使用技能 / 打出口袋里的卡牌，再掷骰子结算步数（掷骰子之后仍然可以继续打卡牌，只是不能再用技能），最后结束回合——即使还没掷骰子，也可以直接结束回合放弃本回合的移动。</div>'+
@@ -214,6 +225,15 @@ export function renderGame(app){
       '<div class="rsec"><b>飒沓流星</b>（商店价30元，被动）：留在口袋里时，自己每一次成功命中的奇袭（不含被格挡/被保护免疫的）都额外前进6格。&nbsp; <b>聚宝盆</b>（商店价30元，被动）：留在口袋里时，自己金钱超过30元+2步，超过80元改为+4步（不叠加，取最高档）。</div>'+
       '<div class="rsec"><b>叨叨不叨叨</b>（商店价15元）：销毁一名玩家手牌中随机1张卡牌，对方没有任何补偿。&nbsp; <b>狮吼正声</b>（商店价30元，奇袭）：无视距离，直接对当前排名第一的玩家（自己是第一则改打第二名）发起奇袭，命中后目标跳过下一回合并倒退5格；同样可被无相金身格挡、对保护状态中的玩家无效。</div>'+
       '<div class="rsec"><b>敲山震虎</b>（商店价20元，奇袭）：无视距离，锁定当前排名第一的玩家（自己是第一则改打第二名），使其跳过下一回合；同样可被无相金身格挡、对保护状态中的玩家无效。只有在场上有玩家率先冲到全程80%之后，商店才会上架这张卡。</div>'+
+      '<div class="rsec"><b>特殊格子</b>：棋盘上有7种特殊效果，每种随机落在一个格子上（紫色边框、有小标记），不管是自己走到的还是被打过去的，只要停在那一格就会触发：'+
+        '<b>无相皇</b>——下一回合无法使用主动技能（可被清风霁月解除）；'+
+        '<b>千夜</b>——接下来2回合 -3 步（可被清风霁月解除）；'+
+        '<b>张万师</b>——立即掷一次骰子并倒退相应格数；'+
+        '<b>太平钟楼</b>——下一轮全场禁止使用奇袭类卡牌和执锐系主动技能（同一轮内多人踩中只算一次）；'+
+        '<b>常平仓</b>——所有玩家立即获得50元；'+
+        '<b>鬼市</b>——随机偷走其他玩家的2张卡牌；'+
+        '<b>崇元殿</b>——下一次掷骰额外 +5 步。'+
+      '</div>'+
     '</details>';
     html+='</div>';
 
@@ -259,9 +279,10 @@ export function renderGame(app){
     if(me.hand.length===0) html+='<div style="font-size:.78rem;color:var(--ivory-dim)">暂无卡牌，去商店看看吧</div>';
     html+=me.hand.map(function(c){
       var cd=CARDS[c.key];
-      var canUse = myTurn && game.status==='playing';
+      var canUse = myTurn && game.status==='playing' && !(cd.surpriseAttack && taipingBanned);
       var sellPrice = cd.price===30 ? SELL_PRICE_FOR_30 : SELL_PRICE_DEFAULT;
-      return '<div class="hand-card"><div class="cname">'+cd.name+(cd.passive?' <span style="font-size:.62rem;color:var(--ivory-dim);font-weight:400">（被动·留在口袋里生效）</span>':'')+'</div><div class="cdesc">'+cd.desc+'</div>'+
+      var lockedNote = (cd.surpriseAttack && taipingBanned) ? ' <span style="font-size:.62rem;color:var(--danger);font-weight:400">（太平钟楼效应，本轮禁用）</span>' : '';
+      return '<div class="hand-card"><div class="cname">'+cd.name+(cd.passive?' <span style="font-size:.62rem;color:var(--ivory-dim);font-weight:400">（被动·留在口袋里生效）</span>':lockedNote)+'</div><div class="cdesc">'+cd.desc+'</div>'+
         '<div class="cfoot"><span class="price-tag">商店价 '+cd.price+' 元</span>'+
         '<div style="display:flex;gap:6px">'+
           '<button class="btn btn-small" data-action="sell-card" data-uid="'+c.uid+'">卖出 +'+sellPrice+'</button>'+
@@ -291,7 +312,7 @@ export function renderGame(app){
 
   if(game.status==='finished'){
     var w=findPlayer(game, game.winner);
-    html+='<div class="winner-overlay"><div class="winner-box"><div class="wtitle">🏆 胜利！</div><div class="wname">'+esc(w?w.name:'')+' 率先抵达第40格</div>'+
+    html+='<div class="winner-overlay"><div class="winner-box"><div class="wtitle">🏆 胜利！</div><div class="wname">'+esc(w?w.name:'')+' 率先抵达第'+WIN_POS+'格</div>'+
       '<button class="btn btn-gold" data-action="back-home-finished">返回首页</button></div></div>';
   }
 

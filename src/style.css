@@ -132,11 +132,14 @@ label.field{ display:flex; flex-direction:column; gap:6px; font-size:.8rem; colo
 }
 .cell.start{ background:rgba(127,176,105,0.18); border-color:rgba(127,176,105,0.5); }
 .cell.finish{ background:rgba(201,162,75,0.22); border-color:var(--gold); }
+.cell.effect{ background:rgba(154,92,192,0.16); border-color:var(--plum); }
 .cell .num{ font-size:.62rem; color:var(--ivory-dim); font-weight:700; }
 .cell .tokens{ flex:1; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:2px; }
 .tok{ width:16px; height:16px; border-radius:50%; font-size:.55rem; display:flex; align-items:center; justify-content:center;
   color:#fff; font-weight:900; border:1px solid rgba(255,255,255,0.5); }
-@media (min-width:600px){ .tok{ width:20px; height:20px; font-size:.62rem; } .cell .num{ font-size:.68rem; } }
+.grid-fx{ width:16px; height:16px; border-radius:4px; font-size:.55rem; display:flex; align-items:center; justify-content:center;
+  background:var(--plum); color:#fff; font-weight:900; flex-shrink:0; }
+@media (min-width:600px){ .tok{ width:20px; height:20px; font-size:.62rem; } .grid-fx{ width:20px; height:20px; font-size:.62rem; } .cell .num{ font-size:.68rem; } }
 
 .dice-box{ display:flex; align-items:center; gap:14px; }
 .die{ width:52px; height:52px; border-radius:10px; background:var(--ivory); position:relative; box-shadow:var(--shadow); flex-shrink:0; }

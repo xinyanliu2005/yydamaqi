@@ -91,7 +91,30 @@ export var CARDS = {
 };
 
 export var PLAYER_COLORS = ['#c1452c','#c9a24b','#4d7eb0','#9a5cc0'];
-export var WIN_POS = 40;
+export var WIN_POS = 99;
+
+/* 特殊格子效果。每局开始时（mutStart）会把这些效果随机分配到棋盘上 0 和
+   WIN_POS 之外的格子上，每种效果目前只出现一次，落在哪一格是随机的——具体
+   分配结果存在 data.gridEffects（{格子号: 效果key}）里，跟着这一局的房间状态走。
+   short 是格子上显示的极简标记（棋盘格太小放不下全名），完整名字/效果放在
+   title 提示和"规则说明"里。 */
+export var GRID_EFFECT_DEFS = {
+  wuxianghuang: { name:'无相皇', short:'皇',
+    desc:'下一回合无法使用主动技能（可被「清风霁月」解除）' },
+  qianye: { name:'千夜', short:'夜',
+    desc:'接下来2回合 -3 步（可被「清风霁月」解除）' },
+  zhangwanshi: { name:'张万师', short:'师',
+    desc:'立即掷一次骰子，并倒退相应的格数' },
+  taipingzhonglou: { name:'太平钟楼', short:'楼',
+    desc:'下一轮，全场禁止使用奇袭类卡牌和执锐系主动技能（同一轮内多人踩中只算一次，不会延长）' },
+  changpingcang: { name:'常平仓', short:'仓',
+    desc:'所有玩家立即获得50元' },
+  guishi: { name:'鬼市', short:'市',
+    desc:'随机偷走其他玩家的2张卡牌（可能来自同一人，也可能分属不同人，内容对其他人保密）' },
+  chongyuandian: { name:'崇元殿', short:'殿',
+    desc:'下一次掷骰额外 +5 步' }
+};
+export var GRID_EFFECT_KEYS = Object.keys(GRID_EFFECT_DEFS);
 
 /* 商店"换一批"的价格阶梯：本回合第 N 次刷新对应下标 N（从0开始），
    超出数组长度的次数一律用最后一档的价格。 */

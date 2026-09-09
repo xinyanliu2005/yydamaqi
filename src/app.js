@@ -170,9 +170,15 @@ app.addEventListener('click', function(e){
     }
     if(cdef && cdef.needsTarget){
       var me0=findPlayer(game, myId);
-      var opps=game.players.filter(function(p){ return p.id!==myId; });
+      /* 妙手回春这类卡可以选自己当目标（组队模式还没做，暂时可以帮场上任意人），
+         其余需要目标的卡默认还是排除自己 */
+      var opps=cdef.selfTargetable ? game.players.slice() : game.players.filter(function(p){ return p.id!==myId; });
       if(cdef.targetRange!=null){
-        opps=opps.filter(function(p){ return Math.abs(p.position-me0.position)<=cdef.targetRange; });
+        /* 千里目：只要留在口袋里，自己发起的凌虚一指距离限制额外 +2 格——
+           这里跟 mutators.js 的 mutPlayCard 保持一致，否则持有千里目的玩家会在
+           客户端这一步就被过滤掉本该能选的目标，看不到选项 */
+        var effRange = cdef.targetRange + (me0.hand.some(function(c){ return c.key==='qianlimu'; }) ? 2 : 0);
+        opps=opps.filter(function(p){ return Math.abs(p.position-me0.position)<=effRange; });
       }
       if(cdef.surpriseAttack){
         opps=opps.filter(function(p){ return !hasActiveSkipTurn(p); });

@@ -40,6 +40,27 @@ export var HEROES = {
     activeDesc:'朝场上最靠近终点的玩家靠近：若相距≤6格，直接移动到对方所在格；若超过6格，则朝对方方向移动6格。移动后立刻获得一张【凌虚一指】。冷却2回合。',
     passiveName:'被动',
     passiveDesc:'落后于场上最靠近终点的玩家3-4格时+2步，落后5-9格时+5步，落后10格及以上时+7步'
+  },
+  qingxi: {
+    key:'qingxi', name:'青溪', color:'#5c8fae', type:'控场',
+    activeName:'坐看云起',
+    activeDesc:'获得一张【妙手回春】，冷却2回合',
+    passiveName:'被动',
+    passiveDesc:'（预留给未来的组队模式）队友被奇袭命中时，可以由自己代付15元或1张卡牌替队友承担；同一轮内队友多次被命中，代价翻倍；队友金钱/卡牌不足时不会触发。当前单人混战模式下暂不生效。'
+  },
+  moshandao: {
+    key:'moshandao', name:'墨山道', color:'#7a6a4f', type:'控场',
+    activeName:'兼爱非攻',
+    activeDesc:'自己获得2张随机卡牌（未来组队模式下，队友也会同时获得2张），冷却2回合',
+    passiveName:'被动',
+    passiveDesc:'这一轮里打出过的卡牌种类数会转化为掷骰步数加成：1种+1步，2种及以上+2步（本回合封顶+2步；未来组队模式下会把队友打出的种类也算进来）'
+  },
+  liyuan: {
+    key:'liyuan', name:'梨园', color:'#c26b7a', type:'神行',
+    activeName:'请君打榜',
+    activeDesc:'随机从一名敌方玩家身上偷取15元或1张随机卡牌（各50%概率，对方没有卡牌时改为偷钱），冷却1回合（相当于每次轮到自己都能用）',
+    passiveName:'被动',
+    passiveDesc:'落后当前第一名超过5格时+4步；自己就是第一名时不会触发'
   }
 };
 
@@ -100,7 +121,14 @@ export var CARDS = {
     needsTarget:false, passive:true },
   yizhiqianjin: { key:'yizhiqianjin', name:'一掷千金', price:20,
     desc:'押上全部身家：花光当前所有金钱，前进（花掉的金钱 ÷ 5）步，最多前进15步',
-    needsTarget:false }
+    needsTarget:false },
+
+  /* 青溪的主动技能"坐看云起"专属产物，商店里买不到（见 STORE_WEIGHTS_EARLY/MID
+     里的权重都是0）。可以选自己当目标——组队模式还没做，暂时可以帮场上任意人，
+     以后有队友概念了，通常会用来救队友。 */
+  miaoshouhuichun: { key:'miaoshouhuichun', name:'妙手回春', price:20,
+    desc:'对一名玩家（可以是自己）使用：若对方当前没有减益，获得+4步增益（持续2回合）；若对方有减益，则清除其所有减益，并改为获得+2步增益（持续2回合）。无法在商店购买，只能通过青溪的【坐看云起】获得',
+    needsTarget:true, selfTargetable:true }
 };
 
 export var PLAYER_COLORS = ['#c1452c','#c9a24b','#4d7eb0','#9a5cc0'];
@@ -158,14 +186,16 @@ export var STORE_WEIGHTS_EARLY = { /* 第1-2轮：新手卡 + 被动卡常见，
   yinyang:8, shengcai:8, qingfeng:8, jinyu:8,
   wuxiang:8, haozhao:8, sadaliuxing:8, jubaopen:8, sancai:8,
   lingxu:1, lingyun:1, qianlimu:1, yizhiqianjin:1,
-  daodao:0, shihou:0, shexing:0, liangshang:0, qiaoshan:0, pofuchenzhou:0
+  daodao:0, shihou:0, shexing:0, liangshang:0, qiaoshan:0, pofuchenzhou:0,
+  miaoshouhuichun:0 /* 只能靠青溪的技能获得，商店/免费发牌永远不会抽到 */
 };
 export var STORE_WEIGHTS_MID = { /* 第3轮起：干扰/进攻类卡牌成为主流 */
   lingxu:8, lingyun:8, daodao:8, shexing:8, liangshang:8,
   qianlimu:8, yizhiqianjin:8, pofuchenzhou:8,
   yinyang:2, shengcai:2, qingfeng:2, jinyu:2,
   wuxiang:2, haozhao:2, sadaliuxing:2, jubaopen:2, sancai:2,
-  shihou:0, qiaoshan:0
+  shihou:0, qiaoshan:0,
+  miaoshouhuichun:0
 };
 /* 达成80%里程碑后，"非率先冲刺者"抽卡时额外叠加的权重——奇袭类卡牌变得更常见，
    给落后的玩家更多反打领先者的机会。 */

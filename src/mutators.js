@@ -412,14 +412,39 @@ export function mutUseSkill(data, playerId, targetId){
       p.skillCooldown=0;
       data.log = pushLog(data.log, p.name+' 本次奇袭无人被真正命中，下一回合仍可再次使用【军威赫赫】');
     }
+  } else if(p.hero==='qingxi'){
+    p.hand.push({uid:uid(), key:'miaoshouhuichun'});
+    data.log = pushLog(data.log, p.name+' 使用【坐看云起】，获得一张【妙手回春】');
+  } else if(p.hero==='moshandao'){
+    /* 组队模式（2v2）还没做，暂时只发给自己；以后有队友概念了，队友也会同时获得2张 */
+    var mBoost=!!data.milestone80PlayerId && data.milestone80PlayerId!==p.id;
+    p.hand.push(drawCard(data.round, mBoost)); p.hand.push(drawCard(data.round, mBoost));
+    data.log = pushLog(data.log, p.name+' 使用【兼爱非攻】，获得2张随机卡牌');
+  } else if(p.hero==='liyuan'){
+    var lyTargets=data.players.filter(function(o){ return o.id!==p.id; });
+    var lyTarget=lyTargets[Math.floor(Math.random()*lyTargets.length)];
+    var lyStealCard = Math.random()<0.5;
+    if(lyStealCard && lyTarget.hand.length===0) lyStealCard=false; /* 对方没牌可偷，退回偷钱 */
+    if(lyStealCard){
+      var lyIdx=Math.floor(Math.random()*lyTarget.hand.length);
+      var lyCard=lyTarget.hand.splice(lyIdx,1)[0];
+      p.hand.push(lyCard);
+      data.log = pushLog(data.log, p.name+' 使用【请君打榜】，从 '+lyTarget.name+' 手里偷走了一张卡牌（内容对其他人保密）');
+    } else {
+      var lyMoney=Math.min(15, lyTarget.money);
+      lyTarget.money -= lyMoney;
+      p.money += lyMoney;
+      data.log = pushLog(data.log, p.name+' 使用【请君打榜】，从 '+lyTarget.name+' 那里偷走了 '+lyMoney+' 元');
+      applyTianquanPassiveIfTriggered(data, lyTarget, lyMoney);
+    }
   } else {
     return {error:'该英雄暂无主动技能'};
   }
   data.turnState.skillUsed = true;
   /* 冷却时间因人而异：狂澜由自己的分支决定（是否有人被真正命中）；
-     文津馆冷却只有1回合，等于"每次轮到自己都能用"；其余英雄默认2回合。 */
+     文津馆、梨园冷却只有1回合，等于"每次轮到自己都能用"；其余英雄默认2回合。 */
   if(p.hero==='kuanglan'){ /* 已在上面分支里设置过 */ }
-  else if(p.hero==='wenjinguan'){ p.skillCooldown = 1; }
+  else if(p.hero==='wenjinguan' || p.hero==='liyuan'){ p.skillCooldown = 1; }
   else { p.skillCooldown = 2; }
   return {data:data};
 }
@@ -551,8 +576,29 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
     checkWinCondition(data, p);
     resolveGridEffect(data, p);
     checkWenjinguanOvertake(data, p, beforePosYZ);
+  } else if(cardKey==='miaoshouhuichun'){
+    /* 唯一一张可以选自己当目标的卡（组队模式还没做，暂时只能帮自己或场上任意其他人，
+       以后有队友概念了，通常会用来救队友） */
+    if(!targetId) return {error:'请选择目标玩家'};
+    var tMSHC=findPlayer(data,targetId);
+    if(!tMSHC) return {error:'目标无效'};
+    var hasDebuffMSHC = tMSHC.buffs.some(function(b){ return (b.type==='STEP_PENALTY'||b.type==='SKIP_TURN'||b.type==='SKILL_LOCKED') && b.turnsLeft>0; });
+    if(hasDebuffMSHC){
+      tMSHC.buffs = tMSHC.buffs.filter(function(b){ return !((b.type==='STEP_PENALTY'||b.type==='SKIP_TURN'||b.type==='SKILL_LOCKED') && b.turnsLeft>0); });
+      addBuff(tMSHC,'STEP_BONUS',2,2,'card:miaoshouhuichun','妙手回春');
+      data.log = pushLog(data.log, p.name+' 对 '+tMSHC.name+' 使用【妙手回春】，清除了对方所有减益，并获得 +2 步增益（持续2回合）');
+    } else {
+      addBuff(tMSHC,'STEP_BONUS',4,2,'card:miaoshouhuichun','妙手回春');
+      data.log = pushLog(data.log, p.name+' 对 '+tMSHC.name+' 使用【妙手回春】，获得 +4 步增益（持续2回合）');
+    }
   } else {
     return {error:'未知卡牌'};
+  }
+  /* 墨山道被动要按"这一轮打出过几种不同的卡牌"算加成，这里统一给所有玩家记录
+     （不只是墨山道自己），逻辑更简单，对其他英雄也没有副作用——反正没人会去读
+     这个字段，除非他们是墨山道。 */
+  if(p.cardsPlayedThisRound && p.cardsPlayedThisRound.indexOf(cardKey)===-1){
+    p.cardsPlayedThisRound.push(cardKey);
   }
   p.hand.splice(idx,1);
   return {data:data};
@@ -631,6 +677,19 @@ function performRoll(data, p, base, extraNotes){
     /* 聚宝盆：按金钱数量分档，只取最高档，不叠加 */
     var richBonus = p.money>80 ? 4 : (p.money>30 ? 2 : 0);
     if(richBonus>0){ bonus+=richBonus; notes.push('聚宝盆：+'+richBonus+'步'); }
+  }
+  if(p.hero==='liyuan'){
+    /* 落后当前第一名超过5格才加成；自己就是第一名时 gap 为0，自然不会触发 */
+    var liyuanLeader=findLeader(data);
+    var liyuanGap=liyuanLeader.position-p.position;
+    if(liyuanGap>5){ bonus+=4; notes.push('梨园被动：落后当前第一名超过5格，额外 +4 步'); }
+  }
+  if(p.hero==='moshandao'){
+    /* 组队模式还没做，暂时只算自己这一轮打出过的卡牌种类数（以后有队友了，
+       队友打出的种类也会一起算进来） */
+    var moshandaoDistinct = (p.cardsPlayedThisRound||[]).length;
+    var moshandaoBonus = Math.min(2, moshandaoDistinct);
+    if(moshandaoBonus>0){ bonus+=moshandaoBonus; notes.push('墨山道被动：这一轮打出过'+moshandaoDistinct+'种卡牌，+'+moshandaoBonus+'步'); }
   }
   var passiveNote = notes.length ? ('（'+notes.join('；')+'）') : '';
   var finalSteps = Math.max(0, base+bonus);

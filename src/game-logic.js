@@ -69,6 +69,7 @@ export function newPlayer(id,name,hero){
   return {
     id:id, name:name, hero:hero, money:0, position:0, hand:[], buffs:[], skillCooldown:0,
     storeOffer:genStoreOffer(0,false), storeRefreshCount:0,
+    cardsPlayedThisRound:[], /* 墨山道被动用：这一轮打出过的不同卡牌种类，每轮开始重置 */
     joinedAt:Date.now()
   };
 }
@@ -82,6 +83,7 @@ export function grantRoundResources(data, playerId){
   var milestoneBoost = !!data.milestone80PlayerId && data.milestone80PlayerId!==playerId;
   p.hand.push(drawCard(data.round, milestoneBoost));
   p.hand.push(drawCard(data.round, milestoneBoost));
+  p.cardsPlayedThisRound = []; /* 新的一轮开始，墨山道被动的计数清零重新算 */
 }
 
 /* 轮到"这名玩家自己的回合"时才结算的个人状态——技能冷却递减、商店刷新次数重置。

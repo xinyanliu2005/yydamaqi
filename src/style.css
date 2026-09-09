@@ -115,6 +115,14 @@ label.field{ display:flex; flex-direction:column; gap:6px; font-size:.8rem; colo
 .host-badge{ font-size:.65rem; background:var(--gold); color:#2a1d05; padding:2px 6px; border-radius:5px; font-weight:900; letter-spacing:.05em; }
 .empty-slot{ opacity:.4; font-size:.85rem; padding:10px 12px; border:1px dashed var(--line); border-radius:10px; margin-bottom:8px; }
 
+/* 组队模式（2v2）：大厅里每个人的队伍标签 + 房主专用的分队按钮 */
+.team-badge{ font-size:.62rem; padding:2px 7px; border-radius:5px; font-weight:900; letter-spacing:.05em; margin-left:6px; }
+.team-badge.team-A{ background:#4d7eb0; color:#fff; }
+.team-badge.team-B{ background:#a83232; color:#fff; }
+.team-badge.team-none{ background:rgba(255,255,255,0.12); color:var(--ivory-dim); }
+.team-assign{ display:flex; gap:6px; margin-top:6px; }
+.team-assign button.active{ background:linear-gradient(180deg,#dcb668,var(--gold)); color:#2a1d05; border-color:transparent; }
+
 /* ---------- game layout ---------- */
 .game-wrap{ width:100%; max-width:1180px; display:grid; grid-template-columns: minmax(0,1.3fr) minmax(300px, 0.9fr); gap:18px; }
 @media (max-width:920px){ .game-wrap{ grid-template-columns:1fr; } }

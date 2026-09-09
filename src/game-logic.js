@@ -70,6 +70,8 @@ export function newPlayer(id,name,hero){
     id:id, name:name, hero:hero, money:0, position:0, hand:[], buffs:[], skillCooldown:0,
     storeOffer:genStoreOffer(0,false), storeRefreshCount:0,
     cardsPlayedThisRound:[], /* 墨山道被动用：这一轮打出过的不同卡牌种类，每轮开始重置 */
+    team:null, /* 只在组队模式（2v2）下有意义：'A' 或 'B'，大厅里由房主分配 */
+    qingxiSavedCount:0, /* 青溪被动用：这一轮里，队友已经替自己化解过几次奇袭（决定下一次代价翻几倍），每轮开始重置 */
     joinedAt:Date.now()
   };
 }
@@ -84,6 +86,7 @@ export function grantRoundResources(data, playerId){
   p.hand.push(drawCard(data.round, milestoneBoost));
   p.hand.push(drawCard(data.round, milestoneBoost));
   p.cardsPlayedThisRound = []; /* 新的一轮开始，墨山道被动的计数清零重新算 */
+  p.qingxiSavedCount = 0; /* 新的一轮开始，青溪被动的翻倍计数也清零重新算 */
 }
 
 /* 轮到"这名玩家自己的回合"时才结算的个人状态——技能冷却递减、商店刷新次数重置。

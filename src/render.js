@@ -119,6 +119,14 @@ export function renderHome(app){
   html += '<label class="field">昵称<input type="text" id="nameInput" placeholder="给自己起个名字" maxlength="12" value="'+esc(nameValue)+'"></label>';
   if(isJoin){
     html += '<label class="field">房间号<input type="text" id="codeInput" placeholder="例如 A7QK9" maxlength="8" style="letter-spacing:.2em;text-transform:uppercase" value="'+esc(codeValue)+'"></label>';
+  } else {
+    /* 对战模式只有创建房间的人能选——加入的人跟着房间里已经定好的模式走。
+       组队模式（2v2）需要正好4人，进大厅之后由房主分配队伍，见 renderLobby。 */
+    html += '<div class="section-title">对战模式</div>';
+    html += '<div class="mode-switch">'+
+      '<button class="btn'+(ui.createMode!=='2v2'?' active':'')+'" data-action="set-create-mode" data-mode="1vn">单人混战</button>'+
+      '<button class="btn'+(ui.createMode==='2v2'?' active':'')+'" data-action="set-create-mode" data-mode="2v2">组队 2v2</button>'+
+    '</div>';
   }
   html += '<div class="section-title">选择英雄</div>';
   html += '<div class="hero-grid">'+heroGridHtml(ui.selectedHero)+'</div>';
@@ -139,9 +147,10 @@ export function renderHome(app){
 export function renderLobby(app){
   var game=runtime.game, myId=runtime.myId, ui=runtime.ui;
   var isHost = game.hostId===myId;
+  var is2v2 = game.mode==='2v2';
   var link = location.origin+location.pathname+'?room='+game.code;
 
-  var html='<div class="topline"><h1 class="brush">凌云棋局</h1><div class="tag">等待玩家加入…</div></div>';
+  var html='<div class="topline"><h1 class="brush">凌云棋局</h1><div class="tag">等待玩家加入…'+(is2v2?'（组队 2v2）':'')+'</div></div>';
   html+='<div class="lobby-wrap"><div class="card-panel">';
   html+='<div class="room-code"><div>房间号<div class="code">'+game.code+'</div></div>'+
     '<button class="btn btn-small" data-action="copy-link">复制邀请链接</button></div>';
@@ -151,15 +160,22 @@ export function renderLobby(app){
     var p=game.players[i];
     if(p){
       var color=PLAYER_COLORS[i];
+      var teamBadge = is2v2 ? ('<span class="team-badge'+(p.team?(' team-'+p.team):' team-none')+'">'+(p.team?(p.team+'队'):'未分组')+'</span>') : '';
+      var teamAssignButtons = (is2v2 && isHost) ?
+        ('<div class="team-assign">'+
+          '<button class="btn btn-small'+(p.team==='A'?' active':'')+'" data-action="set-team" data-id="'+p.id+'" data-team="A">分到A队</button>'+
+          '<button class="btn btn-small'+(p.team==='B'?' active':'')+'" data-action="set-team" data-id="'+p.id+'" data-team="B">分到B队</button>'+
+        '</div>') : '';
       html+='<div class="player-slot'+(p.id===myId?' me':'')+'">'+
         '<div class="token-dot" style="background:'+color+'">'+esc(p.name.slice(0,1))+'</div>'+
         '<div style="flex:1">'+
-          '<div class="pname">'+esc(p.name)+(p.id===myId?' <span style="color:var(--gold);font-size:.7rem">（你）</span>':'')+(p.id===game.hostId?' <span class="host-badge">房主</span>':'')+'</div>'+
+          '<div class="pname">'+esc(p.name)+(p.id===myId?' <span style="color:var(--gold);font-size:.7rem">（你）</span>':'')+(p.id===game.hostId?' <span class="host-badge">房主</span>':'')+teamBadge+'</div>'+
           (p.id===myId
             ? '<select data-role="hero-select" onchange="window.__lqSetHero(this.value)">'+
                 Object.keys(HEROES).map(function(k){ return '<option value="'+k+'"'+(p.hero===k?' selected':'')+'>'+HEROES[k].name+'</option>'; }).join('')+
               '</select>'
             : '<div class="phero">'+(p.hero? HEROES[p.hero].name : '尚未选择英雄')+'</div>')+
+          teamAssignButtons+
         '</div>'+
         (isHost && p.id!==myId ? '<button class="btn btn-small" data-action="kick" data-id="'+p.id+'">移除</button>' : '')+
       '</div>';
@@ -171,7 +187,9 @@ export function renderLobby(app){
   html+='<button class="btn btn-gold" data-action="start-game" style="margin-top:6px"'+(isHost?'':' disabled')+'>'+(isHost?'开始游戏':'等待房主开始游戏')+'</button>';
   html+='<button class="btn" data-action="leave">离开房间</button>';
   if(ui.error) html+='<div class="err-banner">'+esc(ui.error)+'</div>';
-  html+='<div class="footnote">房主可移除玩家或调整完毕后开始游戏，需要至少2名玩家、且所有人已选择英雄。</div>';
+  html+= is2v2
+    ? '<div class="footnote">组队模式（2v2）：需要正好4名玩家，且都已选好英雄；房主在上面把每个人分到A队或B队（两队各2人）才能开始——队里任意一人先跑到终点，整个队伍就算获胜。</div>'
+    : '<div class="footnote">房主可移除玩家或调整完毕后开始游戏，需要至少2名玩家、且所有人已选择英雄。</div>';
   html+='</div></div>';
   app.innerHTML=html;
 }
@@ -214,6 +232,9 @@ export function renderGame(app){
     html+='<div class="card-panel">';
     html+='<details class="rules"><summary>规则说明</summary>'+
       '<div class="rsec"><b>目标</b>：率先到达第'+WIN_POS+'格获胜。</div>'+
+      (game.mode==='2v2' ?
+        '<div class="rsec"><b>组队模式（2v2）</b>：4名玩家分成A、B两队（房主在大厅分配），队里任意一人先到终点，整个队伍就算获胜。阴阳迷踪步/清风霁月/妙手回春这三张"增益"卡可以选择用给自己还是队友；金玉手/梁上君子/摄星拿月/凌虚一指/叨叨不叨叨这类"针对敌方"的卡不能对自己的队友使用。青溪、墨山道两名英雄的被动在组队模式下才会真正生效，见各自说明。</div>' :
+        '<div class="rsec"><b>单人混战模式</b>：没有队伍，所有其他玩家都是对手；阴阳迷踪步/清风霁月/妙手回春这类"增益"卡固定对自己生效，不用挑目标。</div>') +
       '<div class="rsec"><b>每一轮开始</b>：所有玩家同时免费获得 30 元和 2 张随机卡牌，直接放进各自口袋，不用花钱（开局是第1轮；之后每当轮完一圈、回到最先手的玩家时，就开始新的一轮，再同时发一次）。</div>'+
       '<div class="rsec"><b>商店</b>：随时可以打开商店，里面随机上架 5 张互不重复的卡牌，花钱买下放进口袋；买过的卡牌会从这一页下架（刷新后可能重新出现）。口袋里不想要的卡牌也可以随时卖出，商店价30元的卡卖'+SELL_PRICE_FOR_30+'元，其余卡卖'+SELL_PRICE_DEFAULT+'元。"换一批"在你本回合开始时第1次免费，第2次5元，之后每次10元。商店里能抽到什么卡是分阶段的：开局前2轮以基础卡/被动卡为主，奇袭类很少见；第3轮起干扰/进攻类卡牌变多；一旦场上有人率先冲到全程80%，其他玩家抽到奇袭卡的概率会提高。</div>'+
       '<div class="rsec"><b>回合流程</b>：使用技能、打出口袋里的卡牌、掷骰子，这三件事顺序随意、掷骰子前后都可以继续用技能/打牌（技能一回合限用一次，冷却见下），最后结束回合——即使还没掷骰子，也可以直接结束回合放弃本回合的移动。</div>'+
@@ -225,8 +246,8 @@ export function renderGame(app){
       '<div class="rsec"><b>孤云</b>——主动·大道无为（冷却2回合）：朝场上（除自己以外）最靠近终点的玩家靠近——相距≤6格则直接到达对方所在格，否则朝对方方向移动6格；如果自己已经是全场第一，则会转而朝落后自己最多的那名对手移动，方向可能是往回走。移动后立刻获得一张凌虚一指；被动：落后领先者3-4格+2步，5-9格+5步，10格以上+7步。</div>'+
       '<div class="rsec"><b>文津馆</b>——主动·运筹帷幄（冷却1回合，相当于每轮到自己都能用）：投两次骰子取较大值作为本回合点数；被动：本回合移动越过了某名玩家的位置，可以再掷一次骰子，只要还在越过别人就能连续触发。</div>'+
       '<div class="rsec"><b>狂澜</b>——主动·军威赫赫：对前后6格内所有玩家发起奇袭（可被无相金身格挡、保护状态免疫），被扫到的玩家无论是否命中都会随机失去自身一项效果；若无人被真正命中，下回合仍可再用，命中则2回合冷却并前进6格；被动：每次使用主动技能，自己 +3 步（用于紧接着的下一次掷骰子）。</div>'+
-      '<div class="rsec"><b>青溪</b>——主动·坐看云起（冷却2回合）：获得一张【妙手回春】，使用后自动对自己生效；被动：（预留给未来的组队模式）队友被奇袭命中时可以由自己代付15元或1张卡牌替队友承担，同一轮内队友多次被命中代价翻倍，队友金钱/卡牌不足时不触发——当前单人混战模式下暂不生效。</div>'+
-      '<div class="rsec"><b>墨山道</b>——主动·兼爱非攻（冷却2回合）：自己获得2张随机卡牌（未来组队模式下队友也会同时获得2张）；被动：这一轮里打出过的卡牌种类数转化为掷骰步数加成，1种+1步，2种及以上+2步（本回合封顶+2步；未来组队模式下会把队友打出的种类也算进来）。</div>'+
+      '<div class="rsec"><b>青溪</b>——主动·坐看云起（冷却2回合）：获得一张【妙手回春】；被动（组队模式专属）：队友被奇袭命中时，自己可以出面化解——从队友身上拿走15元或1张卡牌（各50%概率，缺哪样就改拿另一样），同一轮内为同一名队友化解多次代价翻倍，队友（翻倍后）金钱/卡牌都不够时不生效。单人混战模式下没有队友，这条被动不生效。</div>'+
+      '<div class="rsec"><b>墨山道</b>——主动·兼爱非攻（冷却2回合）：自己获得2张随机卡牌（组队模式下，队友也会同时获得2张）；被动：这一轮里打出过的卡牌种类数转化为掷骰步数加成，1种+1步，2种及以上+2步（本回合封顶+2步；组队模式下会把队友这一轮打出的种类也并进来一起算）。</div>'+
       '<div class="rsec"><b>梨园</b>——主动·请君打榜（冷却2回合）：随机从一名敌方玩家身上偷取15元或1张随机卡牌（各50%概率，对方缺哪样就改偷另一样，两样都没有则一无所获）；被动：落后当前第一名超过5格时 +4 步，自己就是第一名时不触发。</div>'+
       '<div class="rsec"><b>阴阳迷踪步</b>（商店价20元）：自身 +5 步，持续2回合。&nbsp; <b>生财有道</b>（商店价15元）：按最终步数获得金钱，持续2回合。</div>'+
       '<div class="rsec"><b>清风霁月</b>（商店价15元）：解除自身一项减益。&nbsp; <b>金玉手</b>（商店价15元）：使目标玩家 -3 步。</div>'+
@@ -241,7 +262,7 @@ export function renderGame(app){
       '<div class="rsec"><b>敲山震虎</b>（商店价20元，奇袭）：无视距离，锁定当前排名第一的玩家（自己是第一则改打第二名），使其跳过下一回合；同样可被防住、对保护状态中的玩家无效。只有在场上有玩家率先冲到全程80%之后，商店才会上架这张卡。</div>'+
       '<div class="rsec"><b>破釜沉舟</b>（商店价15元）：立即花费20元，获得2张凌虚一指（第3轮起才常见）。&nbsp; <b>一掷千金</b>（商店价20元）：押上全部身家，花光当前金钱，前进（花掉的钱÷5）步，最多15步。</div>'+
       '<div class="rsec"><b>散财消灾</b>（商店价20元，被动）：留在口袋里时，被奇袭命中会改为损失20元、不会跳过回合（优先级高于无相金身）；若金钱不足20元则这张卡不生效，本次奇袭正常命中；触发一次就消耗掉。&nbsp; <b>千里目</b>（商店价30元，被动）：留在口袋里时，自己发起的凌虚一指奇袭距离额外 +2 格。</div>'+
-      '<div class="rsec"><b>妙手回春</b>（无法在商店购买，只能通过青溪的【坐看云起】获得）：使用后立即对自己生效（单人混战模式没有队友，不用挑目标）——若自己当前没有减益，获得 +4 步增益（持续2回合）；若自己有减益，则清除所有减益，并改为获得 +2 步增益（持续2回合）。</div>'+
+      '<div class="rsec"><b>妙手回春</b>（无法在商店购买，只能通过青溪的【坐看云起】获得）：单人混战模式下不用挑目标，直接对自己生效；组队模式下可以选自己还是队友——若目标当前没有减益，获得 +4 步增益（持续2回合）；若目标有减益，则清除所有减益，并改为获得 +2 步增益（持续2回合）。</div>'+
       '<div class="rsec"><b>特殊格子</b>：棋盘上有12种特殊效果，每种随机落在一个格子上（紫色边框、有小标记），不管是自己走到的还是被打过去的，只要停在那一格就会触发：'+
         '<b>无相皇</b>——下一回合无法使用主动技能（可被清风霁月解除）；'+
         '<b>千夜</b>——接下来2回合 -3 步（可被清风霁月解除）；'+
@@ -272,7 +293,7 @@ export function renderGame(app){
     return '<div class="pstat'+(isCur?' current':'')+'">'+
       '<div class="token-dot" style="background:'+PLAYER_COLORS[idx]+'">'+esc(p.name.slice(0,1))+'</div>'+
       '<div>'+
-        '<div class="pline1">'+esc(p.name)+(p.id===myId?' <span class="youtag">你</span>':'')+'</div>'+
+        '<div class="pline1">'+esc(p.name)+(p.id===myId?' <span class="youtag">你</span>':'')+(game.mode==='2v2'&&p.team?('<span class="team-badge team-'+p.team+'">'+p.team+'队</span>'):'')+'</div>'+
         '<div class="pline2"><span>'+(hero?hero.name:'—')+'</span><span>💰 '+p.money+'</span><span>🃏 '+p.hand.length+'张</span><span>📍 第'+p.position+'格</span>'+
           (p.skillCooldown>0?('<span>⏳技能冷却'+p.skillCooldown+'</span>'):'')+
         '</div>'+
@@ -326,7 +347,7 @@ export function renderGame(app){
   if(ui.pendingTarget){
     var opts=ui.pendingTarget.candidates || game.players.filter(function(p){return p.id!==myId;});
     html+='<div class="modal-backdrop"><div class="modal-box"><h3>'+esc(ui.pendingTarget.title)+'</h3><p>选择要施加效果的目标玩家</p><div class="target-list">'+
-      opts.map(function(p){ return '<button class="btn" data-action="pick-target" data-id="'+p.id+'">'+esc(p.name)+'</button>'; }).join('')+
+      opts.map(function(p){ return '<button class="btn" data-action="pick-target" data-id="'+p.id+'">'+esc(p.name)+(p.id===myId?'（自己）':'')+'</button>'; }).join('')+
     '</div><button class="btn btn-small" data-action="cancel-target">取消</button></div></div>';
   }
 
@@ -362,7 +383,14 @@ export function renderGame(app){
 
   if(game.status==='finished'){
     var w=findPlayer(game, game.winner);
-    html+='<div class="winner-overlay"><div class="winner-box"><div class="wtitle">🏆 胜利！</div><div class="wname">'+esc(w?w.name:'')+' 率先抵达第'+WIN_POS+'格</div>'+
+    var winSubtitle;
+    if(game.mode==='2v2' && w && w.team){
+      var winTeamNames = esc(game.players.filter(function(o){ return o.team===w.team; }).map(function(o){ return o.name; }).join('、'));
+      winSubtitle = winTeamNames+' 所在的 '+w.team+' 队获胜（'+esc(w.name)+' 率先抵达第'+WIN_POS+'格）';
+    } else {
+      winSubtitle = (w?esc(w.name):'')+' 率先抵达第'+WIN_POS+'格';
+    }
+    html+='<div class="winner-overlay"><div class="winner-box"><div class="wtitle">🏆 胜利！</div><div class="wname">'+winSubtitle+'</div>'+
       '<button class="btn btn-gold" data-action="back-home-finished">返回首页</button></div></div>';
   }
 

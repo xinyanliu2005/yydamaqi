@@ -19,7 +19,14 @@ function checkWinCondition(data, p){
   if(p.position>=WIN_POS && data.status==='playing'){
     data.status='finished';
     data.winner=p.id;
-    data.log = pushLog(data.log, '🏆 '+p.name+' 抵达第'+WIN_POS+'格终点，获得胜利！');
+    if(data.mode==='2v2' && p.team){
+      /* 组队模式下是"队伍获胜"——只要队里有一人先到终点，整个队伍都算赢，
+         不是只有亲自跑到终点的这个人。 */
+      var teammateNames = data.players.filter(function(o){ return o.team===p.team; }).map(function(o){ return o.name; });
+      data.log = pushLog(data.log, '🏆 '+p.name+' 抵达第'+WIN_POS+'格终点，'+teammateNames.join('、')+' 所在的队伍获胜！');
+    } else {
+      data.log = pushLog(data.log, '🏆 '+p.name+' 抵达第'+WIN_POS+'格终点，获得胜利！');
+    }
   }
 }
 
@@ -176,11 +183,67 @@ function findHandIndex(p, cardKey){
   return -1;
 }
 
-/* 被奇袭时的两道防御，优先级从高到低：散财消灾 > 无相金身——都会在触发时
-   消耗掉持有的那一张。散财消灾只有在目标金钱够20元时才生效（改为扣20元，
-   不会跳过回合）；金钱不够则这张卡视为没生效，继续往下看无相金身能不能格挡。
-   返回 true 表示这次奇袭已经被防住了（日志已经写好，调用方不应该再施加
-   跳过回合等原本的效果）；返回 false 表示没有防御，调用方按原计划继续。 */
+/* 阴阳迷踪步/清风霁月/妙手回春这类"增益卡"共用的目标解析：单人混战模式下
+   没有队友，不管传没传 targetId 都只认自己；组队模式下允许传一个明确的
+   targetId，但必须是自己或者自己的队友，其余一律当无效目标（防止客户端被
+   篡改后拿这张卡去"帮"敌人——虽然帮敌人也没坏处，但至少行为要跟界面上给的
+   选项一致）。返回目标玩家对象，或者 null 表示目标不合法。 */
+function resolveBuffTarget(data, p, targetId){
+  if(!targetId || targetId===p.id) return p;
+  if(data.mode==='2v2'){
+    var t=findPlayer(data,targetId);
+    if(t && p.team && t.team===p.team) return t;
+  }
+  return null;
+}
+
+/* 金玉手/梁上君子/摄星拿月/凌虚一指/叨叨不叨叨这类"针对单个敌方玩家"的卡
+   共用的合法性检查：目标必须存在、不能是自己，组队模式下也不能是自己的队友
+   （队友不是敌人）。 */
+function isValidEnemyTarget(data, p, t){
+  if(!t || t.id===p.id) return false;
+  if(data.mode==='2v2' && p.team && t.team===p.team) return false;
+  return true;
+}
+
+/* 青溪的被动（组队模式专属）：队友被奇袭命中时，可以由自己出面化解——从队友
+   身上拿走15元或1张卡牌（各50%概率，缺哪样就改拿另一样，跟梨园的兜底逻辑一样）；
+   同一轮内为同一名队友化解过几次，代价就翻几倍（用 qingxiSavedCount 记录，
+   每轮开始重置）；翻倍后的代价队友两样都掏不出时，这条被动不生效。
+   返回 true 表示已经被化解（日志写好了），false 表示没有青溪队友可以帮忙。 */
+function tryQingxiTeamSave(data, attacker, target, attackName){
+  if(data.mode!=='2v2' || !target.team) return false;
+  var mate = data.players.find(function(o){ return o.id!==target.id && o.team===target.team && o.hero==='qingxi'; });
+  if(!mate) return false;
+  var mult = Math.pow(2, target.qingxiSavedCount||0);
+  var costMoney = 15*mult, costCards = 1*mult;
+  var canPayMoney = target.money>=costMoney;
+  var canPayCards = target.hand.length>=costCards;
+  if(!canPayMoney && !canPayCards) return false;
+  var payMoney = (canPayMoney && canPayCards) ? (Math.random()<0.5) : canPayMoney;
+  if(payMoney){
+    target.money -= costMoney;
+    mate.money += costMoney;
+    data.log = pushLog(data.log, attacker.name+' 对 '+target.name+' 使用【'+attackName+'】，但队友 '+mate.name+' 用【青溪】被动出面化解，从 '+target.name+' 那里拿走了 '+costMoney+' 元');
+  } else {
+    var stolen=[];
+    for(var i=0;i<costCards;i++){
+      var idx=Math.floor(Math.random()*target.hand.length);
+      stolen.push(target.hand.splice(idx,1)[0]);
+    }
+    mate.hand = mate.hand.concat(stolen);
+    data.log = pushLog(data.log, attacker.name+' 对 '+target.name+' 使用【'+attackName+'】，但队友 '+mate.name+' 用【青溪】被动出面化解，从 '+target.name+' 那里拿走了 '+stolen.length+' 张卡牌');
+  }
+  target.qingxiSavedCount = (target.qingxiSavedCount||0)+1;
+  return true;
+}
+
+/* 被奇袭时的防御，优先级从高到低：散财消灾 > 无相金身 > 青溪队友出面化解——
+   前两项都会在触发时消耗掉持有的那一张。散财消灾只有在目标金钱够20元时才
+   生效（改为扣20元，不会跳过回合）；金钱不够则这张卡视为没生效，继续往下看
+   无相金身能不能格挡；再往下如果还有组队模式下的青溪队友，看队友能不能出面
+   化解。返回 true 表示这次奇袭已经被防住了（日志已经写好，调用方不应该再
+   施加跳过回合等原本的效果）；返回 false 表示没有防御，调用方按原计划继续。 */
 function checkSurpriseDefense(data, attacker, target, attackName){
   var sIdx = findHandIndex(target,'sancai');
   if(sIdx>-1 && target.money>=20){
@@ -195,6 +258,7 @@ function checkSurpriseDefense(data, attacker, target, attackName){
     data.log = pushLog(data.log, attacker.name+' 对 '+target.name+' 使用【'+attackName+'】，但被对方的【无相金身】格挡了');
     return true;
   }
+  if(tryQingxiTeamSave(data, attacker, target, attackName)) return true;
   return false;
 }
 
@@ -286,6 +350,19 @@ export function mutKick(data, requesterId, targetId){
   return {data:data};
 }
 
+/* 组队模式（2v2）下，房主在大厅里把每个人分到 A/B 两队——由房主统一安排，
+   不是玩家自己选，避免"两个想一队的朋友手速慢了被分开"这种尴尬。 */
+export function mutSetTeam(data, requesterId, targetId, team){
+  if(data.mode!=='2v2') return {error:'当前不是组队模式'};
+  if(data.hostId!==requesterId) return {error:'只有房主可以分配队伍'};
+  if(data.status!=='lobby') return {error:'游戏已开始，无法调整队伍'};
+  if(team!=='A' && team!=='B') return {error:'队伍只能是 A 或 B'};
+  var p=findPlayer(data,targetId);
+  if(!p) return {error:'玩家不存在'};
+  p.team = team;
+  return {data:data};
+}
+
 /* 天泉开局福利：只在游戏刚开始的这一刻发生一次（不是每轮都有）。场上每一个
    天泉玩家都会给所有"其他玩家"（哪怕对方也是天泉）+40元，自己额外+90元。
    多个天泉会互相叠加——两个天泉的话，彼此都会从对方那里再拿到一份+40，
@@ -318,6 +395,16 @@ export function mutStart(data, requesterId){
   if(data.status!=='lobby') return {error:'游戏已经开始'};
   if(data.players.length<2) return {error:'至少需要2名玩家才能开始'};
   for(var i=0;i<data.players.length;i++){ if(!data.players[i].hero) return {error:'还有玩家未选择英雄'}; }
+  if(data.mode==='2v2'){
+    if(data.players.length!==4) return {error:'组队模式（2v2）需要正好4名玩家才能开始'};
+    var teamCounts={A:0,B:0};
+    for(var ti=0;ti<data.players.length;ti++){
+      var pTeam=data.players[ti].team;
+      if(pTeam!=='A' && pTeam!=='B') return {error:'还有玩家未分配队伍'};
+      teamCounts[pTeam]++;
+    }
+    if(teamCounts.A!==2 || teamCounts.B!==2) return {error:'两支队伍必须各有2人'};
+  }
   var order = shuffle(data.players.map(function(p){return p.id;}));
   data.turnOrder = order;
   data.turnIndex = 0;
@@ -418,10 +505,18 @@ export function mutUseSkill(data, playerId, targetId){
     p.hand.push({uid:uid(), key:'miaoshouhuichun'});
     data.log = pushLog(data.log, p.name+' 使用【坐看云起】，获得一张【妙手回春】');
   } else if(p.hero==='moshandao'){
-    /* 组队模式（2v2）还没做，暂时只发给自己；以后有队友概念了，队友也会同时获得2张 */
     var mBoost=!!data.milestone80PlayerId && data.milestone80PlayerId!==p.id;
     p.hand.push(drawCard(data.round, mBoost)); p.hand.push(drawCard(data.round, mBoost));
-    data.log = pushLog(data.log, p.name+' 使用【兼爱非攻】，获得2张随机卡牌');
+    var moshandaoLog = p.name+' 使用【兼爱非攻】，获得2张随机卡牌';
+    if(data.mode==='2v2' && p.team){
+      var moshandaoMate = data.players.find(function(o){ return o.id!==p.id && o.team===p.team; });
+      if(moshandaoMate){
+        var mateBoost=!!data.milestone80PlayerId && data.milestone80PlayerId!==moshandaoMate.id;
+        moshandaoMate.hand.push(drawCard(data.round, mateBoost)); moshandaoMate.hand.push(drawCard(data.round, mateBoost));
+        moshandaoLog += '，队友 '+moshandaoMate.name+' 也获得2张随机卡牌';
+      }
+    }
+    data.log = pushLog(data.log, moshandaoLog);
   } else if(p.hero==='liyuan'){
     var lyTargets=data.players.filter(function(o){ return o.id!==p.id; });
     var lyTarget=lyTargets[Math.floor(Math.random()*lyTargets.length)];
@@ -472,38 +567,45 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
   }
   /* 卡牌的 price 是商店购买价，已经在口袋里的卡牌打出来不再收费 */
   if(cardKey==='qingfeng'){
+    /* 单人混战模式没有队友，固定对自己生效；组队模式下可以选队友（帮TA解除减益） */
+    var tQF = resolveBuffTarget(data, p, targetId);
+    if(!tQF) return {error:'目标无效'};
+    var qfSelf = tQF.id===p.id;
     var dIdx=-1;
     /* 无相皇（SKILL_LOCKED）、千夜（STEP_PENALTY）都能被这张卡解除，找到哪个
        算哪个（"解除自身一项减益"，不是全解）。 */
-    for(var j=0;j<p.buffs.length;j++){
-      if((p.buffs[j].type==='STEP_PENALTY' || p.buffs[j].type==='SKILL_LOCKED') && p.buffs[j].turnsLeft>0){ dIdx=j; break; }
+    for(var j=0;j<tQF.buffs.length;j++){
+      if((tQF.buffs[j].type==='STEP_PENALTY' || tQF.buffs[j].type==='SKILL_LOCKED') && tQF.buffs[j].turnsLeft>0){ dIdx=j; break; }
     }
-    if(dIdx===-1) return {error:'当前没有可解除的减益'};
-    var removed=p.buffs[dIdx];
-    p.buffs.splice(dIdx,1);
-    data.log = pushLog(data.log, p.name+' 使用【清风霁月】，解除了减益「'+removed.label+'」');
+    if(dIdx===-1) return {error:qfSelf?'当前没有可解除的减益':(tQF.name+' 当前没有可解除的减益')};
+    var removed=tQF.buffs[dIdx];
+    tQF.buffs.splice(dIdx,1);
+    data.log = pushLog(data.log, qfSelf ? (p.name+' 使用【清风霁月】，解除了减益「'+removed.label+'」') : (p.name+' 对队友 '+tQF.name+' 使用【清风霁月】，解除了对方的减益「'+removed.label+'」'));
   } else if(cardKey==='jinyu'){
     if(!targetId) return {error:'请选择目标玩家'};
     var t=findPlayer(data,targetId);
-    if(!t || t.id===p.id) return {error:'目标无效'};
+    if(!isValidEnemyTarget(data,p,t)) return {error:'目标无效（组队模式下不能对队友使用这张卡）'};
     addBuff(t,'STEP_PENALTY',3,1,'card:jinyu','金玉手');
     data.log = pushLog(data.log, p.name+' 使用【金玉手】，对 '+t.name+' 施加 -3 步减益');
   } else if(cardKey==='yinyang'){
-    addBuff(p,'STEP_BONUS',5,2,'card:yinyang','阴阳迷踪步');
-    data.log = pushLog(data.log, p.name+' 使用【阴阳迷踪步】，获得 +5 步增益（持续2回合）');
+    /* 单人混战模式没有队友，固定对自己生效；组队模式下可以选队友 */
+    var tYY = resolveBuffTarget(data, p, targetId);
+    if(!tYY) return {error:'目标无效'};
+    addBuff(tYY,'STEP_BONUS',5,2,'card:yinyang','阴阳迷踪步');
+    data.log = pushLog(data.log, tYY.id===p.id ? (p.name+' 使用【阴阳迷踪步】，获得 +5 步增益（持续2回合）') : (p.name+' 把【阴阳迷踪步】用在队友 '+tYY.name+' 身上，对方获得 +5 步增益（持续2回合）'));
   } else if(cardKey==='shengcai'){
     addBuff(p,'MONEY_PER_STEP',1,2,'card:shengcai','生财有道');
     data.log = pushLog(data.log, p.name+' 使用【生财有道】，接下来2回合按步数获得金钱');
   } else if(cardKey==='lingxu'){
     if(!targetId) return {error:'请选择目标玩家'};
     var t=findPlayer(data,targetId);
-    if(!t || t.id===p.id) return {error:'目标无效'};
+    if(!isValidEnemyTarget(data,p,t)) return {error:'目标无效（组队模式下不能对队友使用这张卡）'};
     /* 千里目：只要留在口袋里，自己发起的凌虚一指距离限制额外 +2 格 */
     var lingxuRange = card.targetRange + (findHandIndex(p,'qianlimu')>-1 ? 2 : 0);
     if(Math.abs(t.position-p.position) > lingxuRange) return {error:'目标不在你当前位置前后'+lingxuRange+'格范围内'};
     if(hasActiveSkipTurn(t)) return {error:t.name+' 已经处于「即将跳过回合」的保护状态，要等TA的下一次回合结束后才能再被奇袭'};
     if(checkSurpriseDefense(data, p, t, '凌虚一指')){
-      /* 已被散财消灾/无相金身防住，日志已经在 checkSurpriseDefense 里写好了 */
+      /* 已被散财消灾/无相金身/青溪队友防住，日志已经在 checkSurpriseDefense 里写好了 */
     } else {
       addBuff(t,'SKIP_TURN',0,1,'card:lingxu','凌虚一指');
       data.log = pushLog(data.log, p.name+' 使用【凌虚一指】奇袭 '+t.name+'，对方将跳过下一个回合');
@@ -512,7 +614,7 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
   } else if(cardKey==='liangshang'){
     if(!targetId) return {error:'请选择目标玩家'};
     var t2=findPlayer(data,targetId);
-    if(!t2 || t2.id===p.id) return {error:'目标无效'};
+    if(!isValidEnemyTarget(data,p,t2)) return {error:'目标无效（组队模式下不能对队友使用这张卡）'};
     var stolenMoney = Math.min(15, t2.money);
     t2.money -= stolenMoney;
     p.money += stolenMoney;
@@ -521,7 +623,7 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
   } else if(cardKey==='shexing'){
     if(!targetId) return {error:'请选择目标玩家'};
     var t3=findPlayer(data,targetId);
-    if(!t3 || t3.id===p.id) return {error:'目标无效'};
+    if(!isValidEnemyTarget(data,p,t3)) return {error:'目标无效（组队模式下不能对队友使用这张卡）'};
     if(t3.hand.length===0) return {error:'对方没有手牌可偷'};
     var stealIdx = Math.floor(Math.random()*t3.hand.length);
     var stolenCard = t3.hand.splice(stealIdx,1)[0];
@@ -530,7 +632,7 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
   } else if(cardKey==='daodao'){
     if(!targetId) return {error:'请选择目标玩家'};
     var t4=findPlayer(data,targetId);
-    if(!t4 || t4.id===p.id) return {error:'目标无效'};
+    if(!isValidEnemyTarget(data,p,t4)) return {error:'目标无效（组队模式下不能对队友使用这张卡）'};
     if(t4.hand.length===0) return {error:'对方没有手牌可销毁'};
     var destroyIdx = Math.floor(Math.random()*t4.hand.length);
     var destroyedCard = t4.hand.splice(destroyIdx,1)[0];
@@ -586,10 +688,8 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
     resolveGridEffect(data, p);
     checkWenjinguanOvertake(data, p, beforePosYZ);
   } else if(cardKey==='miaoshouhuichun'){
-    /* 单人混战模式没有队友，固定对自己生效，不用挑目标（needsTarget:false，
-       app.js 那边也不会传 targetId 进来）；以后做了组队模式，这里已经支持传入
-       一个明确的 targetId（帮队友），逻辑不用改，只需要把卡改回 needsTarget:true。 */
-    var tMSHC = targetId ? findPlayer(data,targetId) : p;
+    /* 单人混战模式没有队友，固定对自己生效；组队模式下可以选队友（帮TA） */
+    var tMSHC = resolveBuffTarget(data, p, targetId);
     if(!tMSHC) return {error:'目标无效'};
     var hasDebuffMSHC = tMSHC.buffs.some(function(b){ return (b.type==='STEP_PENALTY'||b.type==='SKIP_TURN'||b.type==='SKILL_LOCKED') && b.turnsLeft>0; });
     var mshcSelf = tMSHC.id===p.id;
@@ -695,9 +795,16 @@ function performRoll(data, p, base, extraNotes){
     if(liyuanGap>5){ bonus+=4; notes.push('梨园被动：落后当前第一名超过5格，额外 +4 步'); }
   }
   if(p.hero==='moshandao'){
-    /* 组队模式还没做，暂时只算自己这一轮打出过的卡牌种类数（以后有队友了，
-       队友打出的种类也会一起算进来） */
-    var moshandaoDistinct = (p.cardsPlayedThisRound||[]).length;
+    /* 单人混战模式只算自己这一轮打出过的卡牌种类数；组队模式下把队友这一轮
+       打出的种类也并进来一起算（同一种卡两人都打出过也只算一种），上限仍是+2步 */
+    var moshandaoTypes = (p.cardsPlayedThisRound||[]).slice();
+    if(data.mode==='2v2' && p.team){
+      var moshandaoMateForPassive = data.players.find(function(o){ return o.id!==p.id && o.team===p.team; });
+      if(moshandaoMateForPassive){
+        (moshandaoMateForPassive.cardsPlayedThisRound||[]).forEach(function(k){ if(moshandaoTypes.indexOf(k)===-1) moshandaoTypes.push(k); });
+      }
+    }
+    var moshandaoDistinct = moshandaoTypes.length;
     var moshandaoBonus = Math.min(2, moshandaoDistinct);
     if(moshandaoBonus>0){ bonus+=moshandaoBonus; notes.push('墨山道被动：这一轮打出过'+moshandaoDistinct+'种卡牌，+'+moshandaoBonus+'步'); }
   }

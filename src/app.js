@@ -6,7 +6,7 @@ import { findPlayer, newPlayer } from './game-logic.js';
 import {
   mutJoin, mutSetHero, mutKick, mutStart, mutUseSkill, mutPlayCard,
   mutBuyCard, mutSellCard, mutRefreshStore, mutRoll, mutEndTurn, hasActiveSkipTurn,
-  mutResolveGridChoice, mutResolveDiscard
+  mutResolveGridChoice, mutResolveDiscard, mutSetTeam
 } from './mutators.js';
 import { render } from './render.js';
 import { runtime, paramRoom } from './app-state.js';
@@ -37,11 +37,12 @@ function runAction(promiseFn){
 }
 
 /* ===================== 房间创建 / 加入 / 订阅 ===================== */
-function createRoom(name, heroKey){
+function createRoom(name, heroKey, mode){
   if(!runtime.db) return;
   var code=roomCode();
   var initial={
     code:code, status:'lobby', createdAt:Date.now(), hostId:runtime.myId,
+    mode:mode||'1vn', /* '1vn'：单人混战（默认）；'2v2'：组队模式，需要正好4人、房主在大厅分好队 */
     players:[newPlayer(runtime.myId,name,heroKey)],
     turnOrder:[], turnIndex:0,
     turnState:{rolled:false, skillUsed:false, lastRoll:null},
@@ -106,11 +107,12 @@ app.addEventListener('click', function(e){
 
   if(action==='home-mode'){ ui.homeMode=el.getAttribute('data-mode'); draw(); return; }
   if(action==='pick-hero'){ ui.selectedHero=el.getAttribute('data-hero'); draw(); return; }
+  if(action==='set-create-mode'){ ui.createMode=el.getAttribute('data-mode'); draw(); return; }
   if(action==='create-room'){
     var nm=(document.getElementById('nameInput')||{}).value || '';
     nm=nm.trim();
     if(!nm){ showError('请输入昵称'); return; }
-    createRoom(nm, ui.selectedHero);
+    createRoom(nm, ui.selectedHero, ui.createMode);
     return;
   }
   if(action==='join-room'){
@@ -124,6 +126,11 @@ app.addEventListener('click', function(e){
   if(action==='set-hero-lobby'){
     var hk=el.getAttribute('data-hero');
     runAction(function(){ return withGameLock(myRoom, function(data){ return mutSetHero(data,myId,hk); }); });
+    return;
+  }
+  if(action==='set-team'){
+    var stId=el.getAttribute('data-id'), stTeam=el.getAttribute('data-team');
+    runAction(function(){ return withGameLock(myRoom, function(data){ return mutSetTeam(data,myId,stId,stTeam); }); });
     return;
   }
   if(action==='kick'){
@@ -169,10 +176,15 @@ app.addEventListener('click', function(e){
       return;
     }
     if(cdef && cdef.needsTarget){
+      /* 金玉手/梁上君子/摄星拿月/凌虚一指/叨叨不叨叨这类"打敌人"的卡：默认排除
+         自己；组队模式下还要排除自己的队友，队友不是敌人，不能拿这些卡打队友
+         （服务端 mutPlayCard 里也有同样的校验，这里只是提前把界面上的选项过滤
+         掉，省得选了又被拒）。 */
       var me0=findPlayer(game, myId);
-      /* 妙手回春这类卡可以选自己当目标（组队模式还没做，暂时可以帮场上任意人），
-         其余需要目标的卡默认还是排除自己 */
-      var opps=cdef.selfTargetable ? game.players.slice() : game.players.filter(function(p){ return p.id!==myId; });
+      var opps=game.players.filter(function(p){ return p.id!==myId; });
+      if(game.mode==='2v2' && me0.team){
+        opps=opps.filter(function(p){ return p.team!==me0.team; });
+      }
       if(cdef.targetRange!=null){
         /* 千里目：只要留在口袋里，自己发起的凌虚一指距离限制额外 +2 格——
            这里跟 mutators.js 的 mutPlayCard 保持一致，否则持有千里目的玩家会在
@@ -188,6 +200,19 @@ app.addEventListener('click', function(e){
         runAction(function(){ return withGameLock(myRoom, function(data){ return mutPlayCard(data,myId,cuid,opps[0].id); }); });
       } else {
         ui.pendingTarget={ kind:'card', title:cdef.name+' · 选择目标', candidates:opps, confirmAction:function(tid){
+          return withGameLock(myRoom, function(data){ return mutPlayCard(data,myId,cuid,tid); });
+        }};
+        draw();
+      }
+    } else if(cdef && cdef.teamTargetable && game.mode==='2v2'){
+      /* 阴阳迷踪步/清风霁月/妙手回春这类增益卡：单人混战模式没有队友，固定
+         对自己生效（走下面的 else 分支）；组队模式下多一个"自己/队友"二选一。 */
+      var meTT=findPlayer(game, myId);
+      var mate=meTT.team ? game.players.find(function(p){ return p.id!==myId && p.team===meTT.team; }) : null;
+      if(!mate){
+        runAction(function(){ return withGameLock(myRoom, function(data){ return mutPlayCard(data,myId,cuid,null); }); });
+      } else {
+        ui.pendingTarget={ kind:'card', title:cdef.name+' · 用给谁', candidates:[meTT, mate], confirmAction:function(tid){
           return withGameLock(myRoom, function(data){ return mutPlayCard(data,myId,cuid,tid); });
         }};
         draw();

@@ -46,14 +46,14 @@ export var HEROES = {
     activeName:'坐看云起',
     activeDesc:'获得一张【妙手回春】，冷却2回合',
     passiveName:'被动',
-    passiveDesc:'（预留给未来的组队模式）队友被奇袭命中时，可以由自己代付15元或1张卡牌替队友承担；同一轮内队友多次被命中，代价翻倍；队友金钱/卡牌不足时不会触发。当前单人混战模式下暂不生效。'
+    passiveDesc:'组队模式（2v2）专属：队友被奇袭命中时，自己可以代为化解——从队友身上拿走15元或1张卡牌（各50%概率，缺哪样就改拿另一样）；同一轮内为同一名队友化解多次，代价翻倍；队友（翻倍后）金钱/卡牌都不足时不会触发。单人混战模式下没有队友，这条被动不生效。'
   },
   moshandao: {
     key:'moshandao', name:'墨山道', color:'#7a6a4f', type:'控场',
     activeName:'兼爱非攻',
-    activeDesc:'自己获得2张随机卡牌（未来组队模式下，队友也会同时获得2张），冷却2回合',
+    activeDesc:'自己获得2张随机卡牌（组队模式下，队友也会同时获得2张），冷却2回合',
     passiveName:'被动',
-    passiveDesc:'这一轮里打出过的卡牌种类数会转化为掷骰步数加成：1种+1步，2种及以上+2步（本回合封顶+2步；未来组队模式下会把队友打出的种类也算进来）'
+    passiveDesc:'这一轮里打出过的卡牌种类数会转化为掷骰步数加成：1种+1步，2种及以上+2步（本回合封顶+2步；组队模式下会把队友这一轮打出的种类也算进来）'
   },
   liyuan: {
     key:'liyuan', name:'梨园', color:'#c26b7a', type:'神行',
@@ -65,9 +65,13 @@ export var HEROES = {
 };
 
 export var CARDS = {
-  yinyang:  { key:'yinyang',  name:'阴阳迷踪步', price:20, desc:'为自己增加5步数增益，持续2回合', needsTarget:false },
+  /* teamTargetable：单人混战（1vN）模式下没有队友，直接对自己生效，不用挑目标；
+     组队模式（2v2）下会多出"自己/队友"二选一，见 app.js 的 play-card 处理。
+     生财有道刻意不给这个标记——那是自己按下一次骰子结算拿钱的效果，送给队友
+     没有意义。 */
+  yinyang:  { key:'yinyang',  name:'阴阳迷踪步', price:20, desc:'为自己增加5步数增益，持续2回合', needsTarget:false, teamTargetable:true },
   shengcai: { key:'shengcai', name:'生财有道',   price:15, desc:'接下来2回合，按该回合最终步数获得等额金钱', needsTarget:false },
-  qingfeng: { key:'qingfeng', name:'清风霁月',   price:15, desc:'消除自身一项减益（可解除“花醉三千”）', needsTarget:false },
+  qingfeng: { key:'qingfeng', name:'清风霁月',   price:15, desc:'消除自身一项减益（可解除“花醉三千”）', needsTarget:false, teamTargetable:true },
   jinyu:    { key:'jinyu',    name:'金玉手',     price:15, desc:'对一名敌方玩家施加减益，使其减少3步数', needsTarget:true },
 
   /* 被动卡：不主动打出，放在手牌（口袋）里就一直生效，直到被消耗或卖出。 */
@@ -125,10 +129,10 @@ export var CARDS = {
 
   /* 青溪的主动技能"坐看云起"专属产物，商店里买不到（见 STORE_WEIGHTS_EARLY/MID
      里的权重都是0）。单人混战（1vN）模式下没有队友，打出去只能是帮自己，不用
-     挑目标；等以后做了组队模式（2v2），才会变成可以选择帮自己还是帮队友。 */
+     挑目标；组队模式（2v2）下可以选择帮自己还是帮队友。 */
   miaoshouhuichun: { key:'miaoshouhuichun', name:'妙手回春', price:20,
-    desc:'使用后立即对自己生效：若自己当前没有减益，获得+4步增益（持续2回合）；若自己有减益，则清除所有减益，并改为获得+2步增益（持续2回合）。无法在商店购买，只能通过青溪的【坐看云起】获得',
-    needsTarget:false }
+    desc:'使用后立即对自己（或组队模式下的队友）生效：若目标当前没有减益，获得+4步增益（持续2回合）；若目标有减益，则清除所有减益，并改为获得+2步增益（持续2回合）。无法在商店购买，只能通过青溪的【坐看云起】获得',
+    needsTarget:false, teamTargetable:true }
 };
 
 export var PLAYER_COLORS = ['#c1452c','#c9a24b','#4d7eb0','#9a5cc0'];

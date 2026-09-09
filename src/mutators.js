@@ -274,7 +274,6 @@ export function mutStart(data, requesterId){
 export function mutUseSkill(data, playerId, targetId){
   if(!isCurrentTurn(data,playerId)) return {error:'还没轮到你'};
   if(data.turnState.skillUsed) return {error:'本回合已使用过技能'};
-  if(data.turnState.rolled) return {error:'掷骰子后无法再使用技能'};
   var p=findPlayer(data,playerId);
   var hero=HEROES[p.hero];
   if(!hero) return {error:'尚未选择英雄'};

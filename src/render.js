@@ -35,10 +35,16 @@ export function buffChipsHtml(p){
 }
 
 export function boardHtml(game){
+  /* 只从落后的那名玩家所在格开始显示，前面大家都已经走过的格子不用再画出来，
+     省地方——比如三个人分别在60/45/33格，就只画33到终点。起点0格永远保留，
+     这样起点提示始终看得到。 */
+  var positions = game.players.map(function(p){ return p.position; });
+  var startPos = positions.length ? Math.max(0, Math.min.apply(null, positions)) : 0;
   var cells=[];
   var gridEffects = game.gridEffects || {};
-  for(var i=0;i<=WIN_POS;i++){
-    var row=Math.floor(i/6), posInRow=i%6;
+  for(var i=startPos;i<=WIN_POS;i++){
+    var localIdx = i - startPos;
+    var row=Math.floor(localIdx/6), posInRow=localIdx%6;
     var col = (row%2===0) ? posInRow : (5-posInRow);
     var effectKey = gridEffects[i];
     var effectDef = effectKey && GRID_EFFECT_DEFS[effectKey];
@@ -52,7 +58,8 @@ export function boardHtml(game){
       '<div class="tokens">'+fxHtml+toksHtml+'</div>'+
     '</div>');
   }
-  return '<div class="board">'+cells.join('')+'</div>';
+  var hiddenNote = startPos>0 ? '<div class="footnote" style="margin-bottom:8px">第0–'+(startPos-1)+'格暂无人，已省略显示</div>' : '';
+  return hiddenNote+'<div class="board">'+cells.join('')+'</div>';
 }
 
 export function diePipsHtml(n){
@@ -105,9 +112,11 @@ export function renderHome(app){
     '<button class="btn'+(!isJoin?' active':'')+'" data-action="home-mode" data-mode="create">创建房间</button>'+
     '<button class="btn'+(isJoin?' active':'')+'" data-action="home-mode" data-mode="join">加入房间</button>'+
   '</div>';
-  html += '<label class="field">昵称<input type="text" id="nameInput" placeholder="给自己起个名字" maxlength="12" value="'+esc(localStorage.getItem('lq_name')||'')+'"></label>';
+  var nameValue = ui.nameDraft!=null ? ui.nameDraft : (localStorage.getItem('lq_name')||'');
+  var codeValue = ui.codeDraft!=null ? ui.codeDraft : initial;
+  html += '<label class="field">昵称<input type="text" id="nameInput" placeholder="给自己起个名字" maxlength="12" value="'+esc(nameValue)+'"></label>';
   if(isJoin){
-    html += '<label class="field">房间号<input type="text" id="codeInput" placeholder="例如 A7QK9" maxlength="8" style="letter-spacing:.2em;text-transform:uppercase" value="'+esc(initial)+'"></label>';
+    html += '<label class="field">房间号<input type="text" id="codeInput" placeholder="例如 A7QK9" maxlength="8" style="letter-spacing:.2em;text-transform:uppercase" value="'+esc(codeValue)+'"></label>';
   }
   html += '<div class="section-title">选择英雄</div>';
   html += '<div class="hero-grid">'+heroGridHtml(ui.selectedHero)+'</div>';
@@ -175,7 +184,7 @@ export function renderGame(app){
   var isSkillLocked = !!(me && me.buffs.some(function(b){ return b.type==='SKILL_LOCKED' && b.turnsLeft>0; }));
   var heroIsZhirui = !!(me && HEROES[me.hero] && HEROES[me.hero].type==='执锐');
   var taipingBanned = game.taipingBanUntil!=null && game.round>=game.taipingBanFrom && game.round<=game.taipingBanUntil;
-  var skillDisabled = !(myTurn && me && !game.turnState.skillUsed && !game.turnState.rolled && game.status==='playing' && me.skillCooldown<=0)
+  var skillDisabled = !(myTurn && me && !game.turnState.skillUsed && game.status==='playing' && me.skillCooldown<=0)
     || isSkillLocked || (heroIsZhirui && taipingBanned);
   var skillLabel = '使用技能'+(me&&HEROES[me.hero]?'：'+HEROES[me.hero].activeName:'');
   if(me && me.skillCooldown>0) skillLabel += '（冷却中，还需'+me.skillCooldown+'回合）';
@@ -205,7 +214,7 @@ export function renderGame(app){
       '<div class="rsec"><b>目标</b>：率先到达第'+WIN_POS+'格获胜。</div>'+
       '<div class="rsec"><b>每一轮开始</b>：所有玩家同时免费获得 30 元和 2 张随机卡牌，直接放进各自口袋，不用花钱（开局是第1轮；之后每当轮完一圈、回到最先手的玩家时，就开始新的一轮，再同时发一次）。</div>'+
       '<div class="rsec"><b>商店</b>：随时可以打开商店，里面随机上架 5 张互不重复的卡牌，花钱买下放进口袋；买过的卡牌会从这一页下架（刷新后可能重新出现）。口袋里不想要的卡牌也可以随时卖出，商店价30元的卡卖'+SELL_PRICE_FOR_30+'元，其余卡卖'+SELL_PRICE_DEFAULT+'元。"换一批"在你本回合开始时第1次免费，第2次5元，之后每次10元。商店里能抽到什么卡是分阶段的：开局前2轮以基础卡/被动卡为主，奇袭类很少见；第3轮起干扰/进攻类卡牌变多；一旦场上有人率先冲到全程80%，其他玩家抽到奇袭卡的概率会提高。</div>'+
-      '<div class="rsec"><b>回合流程</b>：可先使用技能 / 打出口袋里的卡牌，再掷骰子结算步数（掷骰子之后仍然可以继续打卡牌，只是不能再用技能），最后结束回合——即使还没掷骰子，也可以直接结束回合放弃本回合的移动。</div>'+
+      '<div class="rsec"><b>回合流程</b>：使用技能、打出口袋里的卡牌、掷骰子，这三件事顺序随意、掷骰子前后都可以继续用技能/打牌（技能一回合限用一次，冷却见下），最后结束回合——即使还没掷骰子，也可以直接结束回合放弃本回合的移动。</div>'+
       '<div class="rsec"><b>技能冷却</b>：主动技能用一次后默认冷却2回合——本回合用过，下一次轮到自己不能用，再下一次轮到自己才能再用（文津馆的冷却只有1回合，狂澜的冷却取决于本次是否真正命中，见各自说明）。</div>'+
       '<div class="rsec"><b>叠加同一效果</b>：如果同一张卡/同一个技能的效果已经在身上生效，再次使用不会把数值继续叠加，而是把持续回合数相加（比如阴阳迷踪步用两次仍是 +5 步，但持续时间变成4回合）。</div>'+
       '<div class="rsec"><b>横幅播报</b>：屏幕顶部会显示最新一条对局动态（谁使用了什么技能/卡牌、谁掷出了几步）；商店里的买/卖/换一批不会公开，只有你自己看得到。</div>'+
@@ -238,19 +247,6 @@ export function renderGame(app){
     html+='</div>';
 
     html+=boardHtml(game);
-    html+='<div class="card-panel">';
-    html+='<div class="section-title">骰子</div>';
-    html+='<div class="dice-box">'+diePipsHtml(lr?lr.base:1)+
-      '<div class="roll-summary">'+
-        (lr ? ('本回合：骰子 <b>'+lr.base+'</b> 点 '+(lr.bonus>=0?'+':'')+lr.bonus+' 修正 = <b>'+lr.finalSteps+'</b> 步'+(lr.moneyGain>0?'，获得 <b>'+lr.moneyGain+'</b> 元':'')+(lr.passiveNote?('<br>'+esc(lr.passiveNote)):'')) : '尚未掷骰子')+
-      '</div>'+
-    '</div>';
-    html+='<div class="action-bar" style="margin-top:14px">'+
-      '<button class="btn btn-cinnabar" data-action="roll-dice"'+((myTurn && !game.turnState.rolled && game.status==='playing')?'':' disabled')+'>掷骰子</button>'+
-      '<button class="btn" data-action="use-skill"'+(skillDisabled?' disabled':'')+'>'+skillLabel+'</button>'+
-      '<button class="btn btn-gold" data-action="end-turn"'+((myTurn && game.status==='playing')?'':' disabled')+'>结束回合</button>'+
-    '</div>';
-    html+='</div>';
   }
   html+='</div>'; // board-area
 
@@ -291,6 +287,22 @@ export function renderGame(app){
     }).join('');
     html+='</div></div>';
   }
+
+  /* 骰子/技能/结束回合放在手牌下面，不管是不是在商店页都能看到、能操作，
+     不用切回棋盘页才能掷骰子。 */
+  html+='<div class="card-panel">';
+  html+='<div class="section-title">骰子</div>';
+  html+='<div class="dice-box">'+diePipsHtml(lr?lr.base:1)+
+    '<div class="roll-summary">'+
+      (lr ? ('本回合：骰子 <b>'+lr.base+'</b> 点 '+(lr.bonus>=0?'+':'')+lr.bonus+' 修正 = <b>'+lr.finalSteps+'</b> 步'+(lr.moneyGain>0?'，获得 <b>'+lr.moneyGain+'</b> 元':'')+(lr.passiveNote?('<br>'+esc(lr.passiveNote)):'')) : '尚未掷骰子')+
+    '</div>'+
+  '</div>';
+  html+='<div class="action-bar" style="margin-top:14px">'+
+    '<button class="btn btn-cinnabar" data-action="roll-dice"'+((myTurn && !game.turnState.rolled && game.status==='playing')?'':' disabled')+'>掷骰子</button>'+
+    '<button class="btn" data-action="use-skill"'+(skillDisabled?' disabled':'')+'>'+skillLabel+'</button>'+
+    '<button class="btn btn-gold" data-action="end-turn"'+((myTurn && game.status==='playing')?'':' disabled')+'>结束回合</button>'+
+  '</div>';
+  html+='</div>';
 
   html+='</div>'; // side-panel
 

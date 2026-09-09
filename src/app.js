@@ -94,6 +94,15 @@ app.addEventListener('click', function(e){
   var action=el.getAttribute('data-action');
   var ui=runtime.ui, myId=runtime.myId, myRoom=runtime.myRoom, game=runtime.game;
 
+  /* 首页的昵称/房间号输入框在每次点击触发重新渲染时会被整个替换掉——如果不先
+     把当前输入暂存进 ui，用户刚打的字（还没触发输入框的 blur/change）就会
+     凭空消失，比如选个英雄，房间号就被清空了、还得重新输一遍。这里在首页
+     任何点击动作真正执行之前，先把两个输入框现在的内容记下来。 */
+  if(!myRoom){
+    var niSnap=document.getElementById('nameInput'); if(niSnap) ui.nameDraft=niSnap.value;
+    var ciSnap=document.getElementById('codeInput'); if(ciSnap) ui.codeDraft=ciSnap.value;
+  }
+
   if(action==='home-mode'){ ui.homeMode=el.getAttribute('data-mode'); draw(); return; }
   if(action==='pick-hero'){ ui.selectedHero=el.getAttribute('data-hero'); draw(); return; }
   if(action==='create-room'){

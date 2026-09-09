@@ -16,7 +16,7 @@ export var runtime = {
   myRoom: null,
   game: null,
   unsub: null,
-  ui: { error:'', homeMode:'create', selectedHero:'tianquan', pendingTarget:null, pendingChoice:null, joining:false, gameTab:'board' }
+  ui: { error:'', homeMode:'create', selectedHero:'tianquan', pendingTarget:null, pendingChoice:null, joining:false, gameTab:'board', nameDraft:null, codeDraft:null }
 };
 
 export function paramRoom(){

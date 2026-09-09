@@ -226,22 +226,29 @@ export function renderGame(app){
       '<div class="rsec"><b>阴阳迷踪步</b>（商店价20元）：自身 +5 步，持续2回合。&nbsp; <b>生财有道</b>（商店价15元）：按最终步数获得金钱，持续2回合。</div>'+
       '<div class="rsec"><b>清风霁月</b>（商店价15元）：解除自身一项减益。&nbsp; <b>金玉手</b>（商店价15元）：使目标玩家 -3 步。</div>'+
       '<div class="rsec"><b>被动卡牌</b>：无相金身、好兆骰这两张卡不需要主动使用，只要留在口袋（手牌）里就一直生效；被消耗（无相金身格挡奇袭）或卖出后才会失效。</div>'+
-      '<div class="rsec"><b>无相金身</b>（商店价15元，被动）：留在口袋里可以抵御一次"奇袭"类卡牌（目前指凌虚一指），格挡后自身消耗掉。</div>'+
-      '<div class="rsec"><b>凌虚一指</b>（商店价15元，奇袭）：对你当前位置前后2格内的一名玩家使用，使其跳过下一个回合；若对方持有无相金身则被格挡、无效。同一名玩家一次只能被奇袭命中一次——已经"即将跳过回合"的玩家处于保护状态，要等TA的那次回合真正跳过之后才能再被奇袭。</div>'+
+      '<div class="rsec"><b>无相金身</b>（商店价15元，被动）：留在口袋里可以抵御一次"奇袭"类卡牌，格挡后自身消耗掉；若同时持有散财消灾，优先触发散财消灾。</div>'+
+      '<div class="rsec"><b>凌虚一指</b>（商店价15元，奇袭）：对你当前位置前后2格内的一名玩家使用（持有千里目则变为4格），使其跳过下一个回合；若对方持有散财消灾/无相金身则被防住、无效。同一名玩家一次只能被奇袭命中一次——已经"即将跳过回合"的玩家处于保护状态，要等TA的那次回合真正跳过之后才能再被奇袭。</div>'+
       '<div class="rsec"><b>梁上君子</b>（商店价15元）：偷走一名玩家15元（对方不足15元则偷走全部）。&nbsp; <b>摄星拿月</b>（商店价20元）：随机偷走一名玩家手牌中的1张卡牌。</div>'+
       '<div class="rsec"><b>好兆骰</b>（商店价30元，被动）：留在口袋里时，掷骰点数1-2额外+3步，4-5额外+2步，6额外+1步（点数为3无加成）。</div>'+
       '<div class="rsec"><b>凌云踏</b>（商店价15元）：立即向前跳3/4/5/6格（自选），与本回合骰子移动叠加。</div>'+
-      '<div class="rsec"><b>飒沓流星</b>（商店价30元，被动）：留在口袋里时，自己每一次成功命中的奇袭（不含被格挡/被保护免疫的）都额外前进6格。&nbsp; <b>聚宝盆</b>（商店价30元，被动）：留在口袋里时，自己金钱超过30元+2步，超过80元改为+4步（不叠加，取最高档）。</div>'+
-      '<div class="rsec"><b>叨叨不叨叨</b>（商店价15元）：销毁一名玩家手牌中随机1张卡牌，对方没有任何补偿。&nbsp; <b>狮吼正声</b>（商店价30元，奇袭）：无视距离，直接对当前排名第一的玩家（自己是第一则改打第二名）发起奇袭，命中后目标跳过下一回合并倒退5格；同样可被无相金身格挡、对保护状态中的玩家无效。</div>'+
-      '<div class="rsec"><b>敲山震虎</b>（商店价20元，奇袭）：无视距离，锁定当前排名第一的玩家（自己是第一则改打第二名），使其跳过下一回合；同样可被无相金身格挡、对保护状态中的玩家无效。只有在场上有玩家率先冲到全程80%之后，商店才会上架这张卡。</div>'+
-      '<div class="rsec"><b>特殊格子</b>：棋盘上有7种特殊效果，每种随机落在一个格子上（紫色边框、有小标记），不管是自己走到的还是被打过去的，只要停在那一格就会触发：'+
+      '<div class="rsec"><b>飒沓流星</b>（商店价30元，被动）：留在口袋里时，自己每一次成功命中的奇袭（不含被防住/被保护免疫的）都额外前进6格。&nbsp; <b>聚宝盆</b>（商店价30元，被动）：留在口袋里时，自己金钱超过30元+2步，超过80元改为+4步（不叠加，取最高档）。</div>'+
+      '<div class="rsec"><b>叨叨不叨叨</b>（商店价15元）：销毁一名玩家手牌中随机1张卡牌，对方没有任何补偿。&nbsp; <b>狮吼正声</b>（商店价30元，奇袭）：无视距离，直接对当前排名第一的玩家（自己是第一则改打第二名）发起奇袭，命中后目标跳过下一回合并倒退5格；同样可被防住、对保护状态中的玩家无效。</div>'+
+      '<div class="rsec"><b>敲山震虎</b>（商店价20元，奇袭）：无视距离，锁定当前排名第一的玩家（自己是第一则改打第二名），使其跳过下一回合；同样可被防住、对保护状态中的玩家无效。只有在场上有玩家率先冲到全程80%之后，商店才会上架这张卡。</div>'+
+      '<div class="rsec"><b>破釜沉舟</b>（商店价15元）：立即花费20元，获得2张凌虚一指（第3轮起才常见）。&nbsp; <b>一掷千金</b>（商店价20元）：押上全部身家，花光当前金钱，前进（花掉的钱÷5）步，最多15步。</div>'+
+      '<div class="rsec"><b>散财消灾</b>（商店价20元，被动）：留在口袋里时，被奇袭命中会改为损失20元、不会跳过回合（优先级高于无相金身）；若金钱不足20元则这张卡不生效，本次奇袭正常命中；触发一次就消耗掉。&nbsp; <b>千里目</b>（商店价30元，被动）：留在口袋里时，自己发起的凌虚一指奇袭距离额外 +2 格。</div>'+
+      '<div class="rsec"><b>特殊格子</b>：棋盘上有12种特殊效果，每种随机落在一个格子上（紫色边框、有小标记），不管是自己走到的还是被打过去的，只要停在那一格就会触发：'+
         '<b>无相皇</b>——下一回合无法使用主动技能（可被清风霁月解除）；'+
         '<b>千夜</b>——接下来2回合 -3 步（可被清风霁月解除）；'+
         '<b>张万师</b>——立即掷一次骰子并倒退相应格数；'+
         '<b>太平钟楼</b>——下一轮全场禁止使用奇袭类卡牌和执锐系主动技能（同一轮内多人踩中只算一次）；'+
         '<b>常平仓</b>——所有玩家立即获得50元；'+
         '<b>鬼市</b>——随机偷走其他玩家的2张卡牌；'+
-        '<b>崇元殿</b>——下一次掷骰额外 +5 步。'+
+        '<b>崇元殿</b>——下一次掷骰额外 +5 步；'+
+        '<b>飞天残垣</b>——立即获得一张凌云踏；'+
+        '<b>鲁菜</b>——从20元 / 下回合+3步 / 2张随机卡牌中任选一项，选完才能继续掷骰子或结束回合；'+
+        '<b>熔炉</b>——获得2张随机卡牌，然后必须从手牌中弃置2张，处理完才能继续掷骰子或结束回合；'+
+        '<b>竹林小屋</b>——接下来2回合 +3 步；'+
+        '<b>不羡仙</b>——清除自身当前所有减益。'+
       '</div>'+
     '</details>';
     html+='</div>';
@@ -320,6 +327,30 @@ export function renderGame(app){
     html+='<div class="modal-backdrop"><div class="modal-box"><h3>'+esc(ui.pendingChoice.title)+'</h3><p>选择一个选项</p><div class="target-list">'+
       ui.pendingChoice.options.map(function(o){ return '<button class="btn" data-action="pick-choice" data-value="'+esc(String(o.value))+'">'+esc(o.label)+'</button>'; }).join('')+
     '</div><button class="btn btn-small" data-action="cancel-choice">取消</button></div></div>';
+  }
+
+  if(game.pendingGridChoice && game.pendingGridChoice.playerId===myId && game.pendingGridChoice.key==='luchai'){
+    html+='<div class="modal-backdrop"><div class="modal-box"><h3>【鲁菜】三选一</h3><p>踩到了鲁菜效应，选一项奖励才能继续掷骰子/结束回合</p><div class="target-list">'+
+      '<button class="btn" data-action="grid-choice" data-option="money">20元</button>'+
+      '<button class="btn" data-action="grid-choice" data-option="steps">下回合 +3 步</button>'+
+      '<button class="btn" data-action="grid-choice" data-option="cards">2张随机卡牌</button>'+
+    '</div></div></div>';
+  } else if(game.pendingGridChoice && me && game.pendingGridChoice.playerId!==myId){
+    html+='<div class="waiting-note">⏳ 等待 '+esc(findPlayer(game,game.pendingGridChoice.playerId).name)+' 选择【鲁菜】的奖励，暂时无法掷骰子/结束回合</div>';
+  }
+
+  if(game.pendingDiscard && game.pendingDiscard.playerId===myId && me){
+    var needCount = game.pendingDiscard.count;
+    var sel = ui.discardSelection||[];
+    html+='<div class="modal-backdrop"><div class="modal-box modal-box-wide"><h3>【熔炉】弃牌</h3><p>踩到了熔炉效应，从手牌（含刚获得的2张）里选 '+needCount+' 张弃置（已选 '+sel.length+'/'+needCount+'）</p><div class="hand-grid">'+
+      me.hand.map(function(c){
+        var cd2=CARDS[c.key];
+        var picked = sel.indexOf(c.uid)>-1;
+        return '<div class="hand-card'+(picked?' selected':'')+'" data-action="toggle-discard-card" data-uid="'+c.uid+'" style="cursor:pointer"><div class="cname">'+esc(cd2.name)+'</div><div class="cdesc">'+esc(cd2.desc)+'</div></div>';
+      }).join('')+
+    '</div><button class="btn btn-gold" data-action="confirm-discard"'+(sel.length===needCount?'':' disabled')+' style="margin-top:10px">确认弃置</button></div></div>';
+  } else if(game.pendingDiscard && game.pendingDiscard.playerId!==myId){
+    html+='<div class="waiting-note">⏳ 等待 '+esc(findPlayer(game,game.pendingDiscard.playerId).name)+' 弃置【熔炉】给的手牌，暂时无法掷骰子/结束回合</div>';
   }
 
   if(game.status==='finished'){

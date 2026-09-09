@@ -87,7 +87,20 @@ export var CARDS = {
 
   qiaoshan: { key:'qiaoshan', name:'敲山震虎', price:20,
     desc:'奇袭：无视距离，锁定当前排名第一的玩家（如果就是自己则改打第二名），使其跳过下一回合（若被「无相金身」格挡或对方处于保护状态，则完全无效）。只有在场上有玩家率先冲到全程80%之后，商店才会上架这张卡',
-    needsTarget:false, surpriseAttack:true }
+    needsTarget:false, surpriseAttack:true },
+
+  pofuchenzhou: { key:'pofuchenzhou', name:'破釜沉舟', price:15,
+    desc:'立即花费20元，获得2张【凌虚一指】（金钱不足20元时无法使用）',
+    needsTarget:false },
+  sancai: { key:'sancai', name:'散财消灾', price:20,
+    desc:'被动：只要留在口袋里，被「奇袭」命中时不会跳过回合，而是改为损失20元（优先级高于无相金身）；若金钱不足20元，这张卡不生效，本次奇袭正常命中。触发一次就消耗掉这张卡',
+    needsTarget:false, passive:true },
+  qianlimu: { key:'qianlimu', name:'千里目', price:30,
+    desc:'被动：只要留在口袋里，自己发起的【凌虚一指】奇袭距离限制额外 +2 格',
+    needsTarget:false, passive:true },
+  yizhiqianjin: { key:'yizhiqianjin', name:'一掷千金', price:20,
+    desc:'押上全部身家：花光当前所有金钱，前进（花掉的金钱 ÷ 5）步，最多前进15步',
+    needsTarget:false }
 };
 
 export var PLAYER_COLORS = ['#c1452c','#c9a24b','#4d7eb0','#9a5cc0'];
@@ -112,7 +125,17 @@ export var GRID_EFFECT_DEFS = {
   guishi: { name:'鬼市', short:'市',
     desc:'随机偷走其他玩家的2张卡牌（可能来自同一人，也可能分属不同人，内容对其他人保密）' },
   chongyuandian: { name:'崇元殿', short:'殿',
-    desc:'下一次掷骰额外 +5 步' }
+    desc:'下一次掷骰额外 +5 步' },
+  feitiancanyuan: { name:'飞天残垣', short:'垣',
+    desc:'立即获得一张【凌云踏】' },
+  luchai: { name:'鲁菜', short:'菜',
+    desc:'从三项奖励中任选一项：20元 / 下回合+3步 / 2张随机卡牌（需要选择后才能继续掷骰子或结束回合）' },
+  ronglu: { name:'熔炉', short:'炉',
+    desc:'获得2张随机卡牌，然后必须从手牌中弃置2张（需要选择后才能继续掷骰子或结束回合）' },
+  zhulinxiaowu: { name:'竹林小屋', short:'竹',
+    desc:'接下来2回合 +3 步' },
+  buxianxian: { name:'不羡仙', short:'仙',
+    desc:'清除自身当前所有减益' }
 };
 export var GRID_EFFECT_KEYS = Object.keys(GRID_EFFECT_DEFS);
 
@@ -133,14 +156,15 @@ export var MILESTONE_RATIO = 0.8;
    还在摸索阶段，后续会继续调整。 */
 export var STORE_WEIGHTS_EARLY = { /* 第1-2轮：新手卡 + 被动卡常见，奇袭类很少见 */
   yinyang:8, shengcai:8, qingfeng:8, jinyu:8,
-  wuxiang:8, haozhao:8, sadaliuxing:8, jubaopen:8,
-  lingxu:1, lingyun:1,
-  daodao:0, shihou:0, shexing:0, liangshang:0, qiaoshan:0
+  wuxiang:8, haozhao:8, sadaliuxing:8, jubaopen:8, sancai:8,
+  lingxu:1, lingyun:1, qianlimu:1, yizhiqianjin:1,
+  daodao:0, shihou:0, shexing:0, liangshang:0, qiaoshan:0, pofuchenzhou:0
 };
 export var STORE_WEIGHTS_MID = { /* 第3轮起：干扰/进攻类卡牌成为主流 */
   lingxu:8, lingyun:8, daodao:8, shexing:8, liangshang:8,
+  qianlimu:8, yizhiqianjin:8, pofuchenzhou:8,
   yinyang:2, shengcai:2, qingfeng:2, jinyu:2,
-  wuxiang:2, haozhao:2, sadaliuxing:2, jubaopen:2,
+  wuxiang:2, haozhao:2, sadaliuxing:2, jubaopen:2, sancai:2,
   shihou:0, qiaoshan:0
 };
 /* 达成80%里程碑后，"非率先冲刺者"抽卡时额外叠加的权重——奇袭类卡牌变得更常见，

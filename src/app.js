@@ -5,7 +5,8 @@ import { roomCode } from './utils.js';
 import { findPlayer, newPlayer } from './game-logic.js';
 import {
   mutJoin, mutSetHero, mutKick, mutStart, mutUseSkill, mutPlayCard,
-  mutBuyCard, mutSellCard, mutRefreshStore, mutRoll, mutEndTurn, hasActiveSkipTurn
+  mutBuyCard, mutSellCard, mutRefreshStore, mutRoll, mutEndTurn, hasActiveSkipTurn,
+  mutResolveGridChoice, mutResolveDiscard
 } from './mutators.js';
 import { render } from './render.js';
 import { runtime, paramRoom } from './app-state.js';
@@ -231,6 +232,31 @@ app.addEventListener('click', function(e){
     return;
   }
   if(action==='cancel-choice'){ ui.pendingChoice=null; draw(); return; }
+
+  if(action==='grid-choice'){
+    var gcOption=el.getAttribute('data-option');
+    runAction(function(){ return withGameLock(myRoom, function(data){ return mutResolveGridChoice(data,myId,gcOption); }); });
+    return;
+  }
+  if(action==='toggle-discard-card'){
+    var tdUid=el.getAttribute('data-uid');
+    var sel=ui.discardSelection||[];
+    var pos=sel.indexOf(tdUid);
+    var neededCount=(game.pendingDiscard && game.pendingDiscard.count)||2;
+    if(pos>-1){ sel=sel.filter(function(u){ return u!==tdUid; }); }
+    else if(sel.length<neededCount){ sel=sel.concat([tdUid]); }
+    ui.discardSelection=sel;
+    draw();
+    return;
+  }
+  if(action==='confirm-discard'){
+    var discardUids=(ui.discardSelection||[]).slice();
+    runAction(function(){ return withGameLock(myRoom, function(data){ return mutResolveDiscard(data,myId,discardUids); }).then(function(res){
+      if(res && res.ok!==false) ui.discardSelection=[];
+      return res;
+    }); });
+    return;
+  }
 
   if(action==='roll-dice'){
     runAction(function(){ return withGameLock(myRoom, function(data){ return mutRoll(data,myId); }); });

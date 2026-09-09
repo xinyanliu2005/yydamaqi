@@ -72,7 +72,50 @@ function resolveGridEffect(data, p){
   } else if(effectKey==='chongyuandian'){
     addBuff(p,'STEP_BONUS',5,1,'grid:chongyuandian','崇元殿');
     data.log = pushLog(data.log, p.name+' 踩到【崇元殿】，下一次掷骰额外 +5 步');
+  } else if(effectKey==='feitiancanyuan'){
+    p.hand.push({uid:uid(), key:'lingyun'});
+    data.log = pushLog(data.log, p.name+' 踩到【飞天残垣】，获得一张【凌云踏】');
+  } else if(effectKey==='luchai'){
+    /* 需要玩家自己选一项奖励，不能在这里直接结算——用 data.pendingGridChoice
+       挂起，掷骰子/结束回合都会被这个挂起的选择卡住（见 pendingGridBlockError），
+       直到 mutResolveGridChoice 处理完。同一时间只支持挂起一个，如果撞上另一名
+       玩家还没处理完的挂起，这次触发就跳过，避免互相覆盖。 */
+    if(data.pendingGridChoice){
+      data.log = pushLog(data.log, p.name+' 踩到【鲁菜】，但当前还有其他玩家的鲁菜奖励待选择，这次触发被跳过');
+    } else {
+      data.pendingGridChoice = {playerId:p.id, key:'luchai'};
+      data.log = pushLog(data.log, p.name+' 踩到【鲁菜】，请选择一项奖励：20元 / 下回合+3步 / 2张随机卡牌');
+    }
+  } else if(effectKey==='ronglu'){
+    if(data.pendingDiscard){
+      data.log = pushLog(data.log, p.name+' 踩到【熔炉】，但当前还有其他玩家的熔炉弃牌待处理，这次触发被跳过');
+    } else {
+      var ronlgMilestoneBoost = !!data.milestone80PlayerId && data.milestone80PlayerId!==p.id;
+      p.hand.push(drawCard(data.round, ronlgMilestoneBoost));
+      p.hand.push(drawCard(data.round, ronlgMilestoneBoost));
+      data.pendingDiscard = {playerId:p.id, count:2};
+      data.log = pushLog(data.log, p.name+' 踩到【熔炉】，获得2张随机卡牌，需要从手牌中弃置2张（含新卡）');
+    }
+  } else if(effectKey==='zhulinxiaowu'){
+    addBuff(p,'STEP_BONUS',3,2,'grid:zhulinxiaowu','竹林小屋');
+    data.log = pushLog(data.log, p.name+' 踩到【竹林小屋】，接下来2回合 +3 步');
+  } else if(effectKey==='buxianxian'){
+    var removedDebuffs = p.buffs.filter(function(b){ return b.type==='STEP_PENALTY'||b.type==='SKIP_TURN'||b.type==='SKILL_LOCKED'; });
+    if(removedDebuffs.length>0){
+      p.buffs = p.buffs.filter(function(b){ return !(b.type==='STEP_PENALTY'||b.type==='SKIP_TURN'||b.type==='SKILL_LOCKED'); });
+      data.log = pushLog(data.log, p.name+' 踩到【不羡仙】，清除了身上所有减益（共'+removedDebuffs.length+'项）');
+    } else {
+      data.log = pushLog(data.log, p.name+' 踩到【不羡仙】，但身上暂时没有减益可清除');
+    }
   }
+}
+
+/* 有没有玩家的鲁菜奖励/熔炉弃牌还没处理完——占用期间不能掷骰子或结束回合，
+   避免游戏在这类"需要玩家自己做选择"的效果还悬而未决时继续往前推进。 */
+function pendingGridBlockError(data){
+  if(data.pendingGridChoice) return nameOf(data,data.pendingGridChoice.playerId)+' 还没有选择【鲁菜】的奖励，请先处理';
+  if(data.pendingDiscard) return nameOf(data,data.pendingDiscard.playerId)+' 还没有弃置【熔炉】给的手牌，请先处理';
+  return null;
 }
 
 function isSurpriseAttackBanned(data){
@@ -129,6 +172,28 @@ function checkWenjinguanOvertake(data, p, beforePos){
 function findHandIndex(p, cardKey){
   for(var i=0;i<p.hand.length;i++){ if(p.hand[i].key===cardKey) return i; }
   return -1;
+}
+
+/* 被奇袭时的两道防御，优先级从高到低：散财消灾 > 无相金身——都会在触发时
+   消耗掉持有的那一张。散财消灾只有在目标金钱够20元时才生效（改为扣20元，
+   不会跳过回合）；金钱不够则这张卡视为没生效，继续往下看无相金身能不能格挡。
+   返回 true 表示这次奇袭已经被防住了（日志已经写好，调用方不应该再施加
+   跳过回合等原本的效果）；返回 false 表示没有防御，调用方按原计划继续。 */
+function checkSurpriseDefense(data, attacker, target, attackName){
+  var sIdx = findHandIndex(target,'sancai');
+  if(sIdx>-1 && target.money>=20){
+    target.hand.splice(sIdx,1);
+    target.money -= 20;
+    data.log = pushLog(data.log, attacker.name+' 对 '+target.name+' 使用【'+attackName+'】，但被对方的【散财消灾】化解，对方改为损失20元');
+    return true;
+  }
+  var wIdx = findHandIndex(target,'wuxiang');
+  if(wIdx>-1){
+    target.hand.splice(wIdx,1);
+    data.log = pushLog(data.log, attacker.name+' 对 '+target.name+' 使用【'+attackName+'】，但被对方的【无相金身】格挡了');
+    return true;
+  }
+  return false;
 }
 
 /* 玩家身上是否带着"即将跳过回合"的效果（被凌虚一指命中过、还没轮到自己回合被跳过）。
@@ -258,6 +323,8 @@ export function mutStart(data, requesterId){
   data.round = 1;
   data.gridEffects = generateGridEffects();
   data.turnState = {rolled:false, skillUsed:false, lastRoll:null};
+  data.pendingGridChoice = null;
+  data.pendingDiscard = null;
   /* 第一轮开始：所有玩家同时获得这一轮的金钱和卡牌，商店也按第1轮的权重刷新一次
      （不是等到各自的回合才发，也不是沿用大厅里的初始商店） */
   order.forEach(function(pid){
@@ -324,10 +391,8 @@ export function mutUseSkill(data, playerId, targetId){
         data.log = pushLog(data.log, o.name+' 被【军威赫赫】的余波扫到，随机失去了一项效果「'+removedBuff.label+'」');
       }
       if(!wasProtected){
-        var wIdx=findHandIndex(o,'wuxiang');
-        if(wIdx>-1){
-          o.hand.splice(wIdx,1);
-          data.log = pushLog(data.log, p.name+' 使用【军威赫赫】奇袭 '+o.name+'，但被对方的【无相金身】格挡了');
+        if(checkSurpriseDefense(data, p, o, '军威赫赫')){
+          /* 已被散财消灾/无相金身防住，日志已经在 checkSurpriseDefense 里写好了 */
         } else {
           addBuff(o,'SKIP_TURN',0,1,'skill:kuanglan','军威赫赫');
           killedSomeone=true;
@@ -399,12 +464,12 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
     if(!targetId) return {error:'请选择目标玩家'};
     var t=findPlayer(data,targetId);
     if(!t || t.id===p.id) return {error:'目标无效'};
-    if(Math.abs(t.position-p.position) > card.targetRange) return {error:'目标不在你当前位置前后'+card.targetRange+'格范围内'};
+    /* 千里目：只要留在口袋里，自己发起的凌虚一指距离限制额外 +2 格 */
+    var lingxuRange = card.targetRange + (findHandIndex(p,'qianlimu')>-1 ? 2 : 0);
+    if(Math.abs(t.position-p.position) > lingxuRange) return {error:'目标不在你当前位置前后'+lingxuRange+'格范围内'};
     if(hasActiveSkipTurn(t)) return {error:t.name+' 已经处于「即将跳过回合」的保护状态，要等TA的下一次回合结束后才能再被奇袭'};
-    var wuxiangIdx=findHandIndex(t,'wuxiang');
-    if(wuxiangIdx>-1){
-      t.hand.splice(wuxiangIdx,1);
-      data.log = pushLog(data.log, p.name+' 使用【凌虚一指】奇袭 '+t.name+'，但被对方的【无相金身】格挡了');
+    if(checkSurpriseDefense(data, p, t, '凌虚一指')){
+      /* 已被散财消灾/无相金身防住，日志已经在 checkSurpriseDefense 里写好了 */
     } else {
       addBuff(t,'SKIP_TURN',0,1,'card:lingxu','凌虚一指');
       data.log = pushLog(data.log, p.name+' 使用【凌虚一指】奇袭 '+t.name+'，对方将跳过下一个回合');
@@ -440,10 +505,8 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
     /* 无视距离，直接锁定当前排名第一的玩家（排除自己——如果自己就是第一，改打第二名） */
     var top=findLeaderExcluding(data,p.id);
     if(hasActiveSkipTurn(top)) return {error:top.name+' 已经处于「即将跳过回合」的保护状态，要等TA的下一次回合结束后才能再被奇袭'};
-    var wIdx2=findHandIndex(top,'wuxiang');
-    if(wIdx2>-1){
-      top.hand.splice(wIdx2,1);
-      data.log = pushLog(data.log, p.name+' 对 '+top.name+' 使用【狮吼正声】，但被对方的【无相金身】格挡了');
+    if(checkSurpriseDefense(data, p, top, '狮吼正声')){
+      /* 已被散财消灾/无相金身防住，日志已经在 checkSurpriseDefense 里写好了 */
     } else {
       addBuff(top,'SKIP_TURN',0,1,'card:shihou','狮吼正声');
       applyMovement(top, -5);
@@ -464,15 +527,30 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
     /* 无视距离，直接锁定当前排名第一的玩家（排除自己——如果自己就是第一，改打第二名） */
     var top3=findLeaderExcluding(data,p.id);
     if(hasActiveSkipTurn(top3)) return {error:top3.name+' 已经处于「即将跳过回合」的保护状态，要等TA的下一次回合结束后才能再被奇袭'};
-    var wIdx4=findHandIndex(top3,'wuxiang');
-    if(wIdx4>-1){
-      top3.hand.splice(wIdx4,1);
-      data.log = pushLog(data.log, p.name+' 对 '+top3.name+' 使用【敲山震虎】，但被对方的【无相金身】格挡了');
+    if(checkSurpriseDefense(data, p, top3, '敲山震虎')){
+      /* 已被散财消灾/无相金身防住，日志已经在 checkSurpriseDefense 里写好了 */
     } else {
       addBuff(top3,'SKIP_TURN',0,1,'card:qiaoshan','敲山震虎');
       data.log = pushLog(data.log, p.name+' 对 '+top3.name+' 使用【敲山震虎】，命中！对方将跳过下一回合');
       onSurpriseAttackSuccess(data, p);
     }
+  } else if(cardKey==='pofuchenzhou'){
+    if(p.money<20) return {error:'金钱不足，破釜沉舟需要花费20元'};
+    p.money -= 20;
+    p.hand.push({uid:uid(), key:'lingxu'});
+    p.hand.push({uid:uid(), key:'lingxu'});
+    data.log = pushLog(data.log, p.name+' 使用【破釜沉舟】，花费20元获得2张【凌虚一指】');
+  } else if(cardKey==='yizhiqianjin'){
+    if(p.money<=0) return {error:'没有钱可以一掷千金'};
+    var stakedMoney = p.money;
+    var stepsYZ = Math.min(15, Math.floor(stakedMoney/5));
+    p.money = 0;
+    var beforePosYZ = p.position;
+    applyMovement(p, stepsYZ);
+    data.log = pushLog(data.log, p.name+' 使用【一掷千金】，押上全部'+stakedMoney+'元，前进了 '+stepsYZ+' 格（到达第 '+p.position+' 格）');
+    checkWinCondition(data, p);
+    resolveGridEffect(data, p);
+    checkWenjinguanOvertake(data, p, beforePosYZ);
   } else {
     return {error:'未知卡牌'};
   }
@@ -577,15 +655,66 @@ function performRoll(data, p, base, extraNotes){
 export function mutRoll(data, playerId){
   if(!isCurrentTurn(data,playerId)) return {error:'还没轮到你'};
   if(data.turnState.rolled) return {error:'本回合已经掷过骰子'};
+  var blockMsg = pendingGridBlockError(data);
+  if(blockMsg) return {error:blockMsg};
   var p=findPlayer(data,playerId);
   var base = 1+Math.floor(Math.random()*6);
   performRoll(data, p, base);
   return {data:data};
 }
 
+/* 鲁菜：从三项奖励里选一项。option 是 'money' / 'steps' / 'cards'。 */
+export function mutResolveGridChoice(data, playerId, option){
+  var pending = data.pendingGridChoice;
+  if(!pending) return {error:'当前没有待选择的格子奖励'};
+  if(pending.playerId!==playerId) return {error:'这不是你的选择'};
+  var p=findPlayer(data,playerId);
+  if(pending.key==='luchai'){
+    if(option==='money'){
+      p.money += 20;
+      data.log = pushLog(data.log, p.name+' 在【鲁菜】效应中选择了20元');
+    } else if(option==='steps'){
+      addBuff(p,'STEP_BONUS',3,1,'grid:luchai','鲁菜');
+      data.log = pushLog(data.log, p.name+' 在【鲁菜】效应中选择了下回合 +3 步');
+    } else if(option==='cards'){
+      var luchaiMilestoneBoost = !!data.milestone80PlayerId && data.milestone80PlayerId!==p.id;
+      p.hand.push(drawCard(data.round, luchaiMilestoneBoost));
+      p.hand.push(drawCard(data.round, luchaiMilestoneBoost));
+      data.log = pushLog(data.log, p.name+' 在【鲁菜】效应中选择了2张随机卡牌');
+    } else {
+      return {error:'请选择一个有效选项'};
+    }
+  } else {
+    return {error:'未知的待选择效果'};
+  }
+  data.pendingGridChoice = null;
+  return {data:data};
+}
+
+/* 熔炉：从手牌（含刚获得的2张）里弃置指定数量的卡牌，uids 是要弃置的卡牌 uid 列表。 */
+export function mutResolveDiscard(data, playerId, uids){
+  var pending = data.pendingDiscard;
+  if(!pending) return {error:'当前没有待弃置的手牌'};
+  if(pending.playerId!==playerId) return {error:'这不是你的弃牌'};
+  if(!Array.isArray(uids) || uids.length!==pending.count) return {error:'请选择'+pending.count+'张要弃置的手牌'};
+  var p=findPlayer(data,playerId);
+  var seen={};
+  for(var i=0;i<uids.length;i++){
+    if(seen[uids[i]]) return {error:'不能重复选择同一张卡牌'};
+    seen[uids[i]]=true;
+    if(!p.hand.some(function(c){ return c.uid===uids[i]; })) return {error:'手牌不存在或已被使用'};
+  }
+  p.hand = p.hand.filter(function(c){ return uids.indexOf(c.uid)===-1; });
+  data.log = pushLog(data.log, p.name+' 在【熔炉】效应中弃置了'+pending.count+'张手牌');
+  data.pendingDiscard = null;
+  return {data:data};
+}
+
 export function mutEndTurn(data, playerId){
   if(!isCurrentTurn(data,playerId)) return {error:'还没轮到你'};
   if(data.status!=='playing') return {error:'游戏已结束'};
+  var blockMsg2 = pendingGridBlockError(data);
+  if(blockMsg2) return {error:blockMsg2};
   /* 不要求必须先掷骰子——玩家可以选择放弃本回合的移动，直接结束回合 */
   var adv = advanceTurnIndex(data);
   data.turnIndex = adv.idx;

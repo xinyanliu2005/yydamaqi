@@ -194,10 +194,21 @@ details.rules b{ color:var(--ivory); }
 
 .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,0.55); display:flex; align-items:center; justify-content:center; z-index:50; padding:16px; }
 .modal-box{ background:var(--panel-solid); border:1px solid var(--line-strong); border-radius:12px; padding:20px; max-width:340px; width:100%; box-shadow:var(--shadow); }
+.modal-box.modal-box-wide{ max-width:420px; max-height:80vh; overflow-y:auto; }
 .modal-box h3{ margin:0 0 4px; color:var(--gold); }
 .modal-box p{ font-size:.8rem; color:var(--ivory-dim); margin-top:0; }
 .target-list{ display:flex; flex-direction:column; gap:8px; margin:12px 0; }
 .target-list button{ text-align:left; }
+
+/* 熔炉弃牌：手牌卡片本身可以点击选中（选中态高亮），不是通过按钮 */
+.hand-card.selected{ border-color:var(--danger); background:rgba(224,92,74,0.14); }
+
+/* 鲁菜/熔炉挂起时，不是这次触发对象的其他玩家看到的等待提示 */
+.waiting-note{
+  grid-column:1/-1; margin:10px 0 0; padding:8px 14px; border-radius:9px;
+  background:rgba(201,162,75,0.12); border:1px solid var(--gold-soft);
+  color:var(--ivory-dim); font-size:.78rem; text-align:center;
+}
 
 .winner-overlay{ position:fixed; inset:0; background:rgba(6,20,14,0.82); display:flex; align-items:center; justify-content:center; z-index:60; padding:16px; }
 .winner-box{ text-align:center; background:var(--panel-solid); border:1px solid var(--gold); border-radius:16px; padding:36px 30px; box-shadow:var(--shadow); }

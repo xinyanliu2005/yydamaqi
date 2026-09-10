@@ -286,6 +286,17 @@ function findLeaderExcluding(data, excludeId){
   }, null);
 }
 
+/* 跟上面那个几乎一样，多了"组队模式下也排除自己的队友"——孤云的主动技能
+   用这个，靠近的应该是敌方的领先者，不能是自己队友（就算队友刚好全场领先，
+   也不该往队友那边靠）。狮吼正声/敲山震虎这两张卡的自动选敌逻辑暂时还是
+   用上面那个不区分队伍的版本，见 README 里记的已知范围限制。 */
+function findLeaderExcludingTeam(data, p){
+  return data.players.reduce(function(best,pl){
+    if(!isValidEnemyTarget(data,p,pl)) return best;
+    return (!best || pl.position>best.position) ? pl : best;
+  }, null);
+}
+
 /* 飒沓流星：只要留在口袋里，自己每一次成功命中的奇袭都额外前进6格。
    在每一处"奇袭真正命中（不是被格挡/保护免疫）"的地方调用一次。 */
 function onSurpriseAttackSuccess(data, attacker){
@@ -447,14 +458,16 @@ export function mutUseSkill(data, playerId, targetId){
     p.hand.push(drawCard(data.round, tqMilestoneBoost)); p.hand.push(drawCard(data.round, tqMilestoneBoost));
     data.log = pushLog(data.log, p.name+' 使用【千金取义】，花费20元获得2张随机卡牌');
   } else if(p.hero==='zuihuayin'){
-    /* 对场上所有其他玩家一起施加减益，不用挑目标 */
-    var zTargets = data.players.filter(function(o){ return o.id!==p.id; });
+    /* 对场上所有其他玩家一起施加减益，不用挑目标；组队模式下排除自己的队友，
+       不会误伤队友。 */
+    var zTargets = data.players.filter(function(o){ return isValidEnemyTarget(data,p,o); });
     zTargets.forEach(function(o){ addBuff(o,'STEP_PENALTY',3,2,'skill:zuihuayin','花醉三千'); });
-    data.log = pushLog(data.log, p.name+' 使用【花醉三千】，对所有其他玩家施加 -3 步减益（持续2回合）');
+    data.log = pushLog(data.log, p.name+' 使用【花醉三千】，对所有敌方玩家施加 -3 步减益（持续2回合）');
   } else if(p.hero==='guyun'){
-    /* 排除自己去找"最靠近终点的玩家"——如果孤云自己就是全场第一，
-       这里应该找到最领先的对手，然后朝TA的方向移动（可能是往回走）。 */
-    var leader=findLeaderExcluding(data,p.id);
+    /* 排除自己（组队模式下也排除队友）去找"最靠近终点的玩家"——如果孤云
+       自己就是全场领先的那个，这里应该找到最领先的对手，然后朝TA的方向
+       移动（可能是往回走）。 */
+    var leader=findLeaderExcludingTeam(data,p);
     var gap=leader.position-p.position; /* 如果孤云自己是第一，gap 会是负数，表示要往回走 */
     if(Math.abs(gap)<=6){ p.position=leader.position; } else { p.position += (gap>=0?6:-6); }
     p.position = Math.max(0, Math.min(WIN_POS, p.position));
@@ -467,7 +480,8 @@ export function mutUseSkill(data, playerId, targetId){
     performRoll(data, p, Math.max(d1,d2), ['运筹帷幄：两次骰子分别为'+d1+'和'+d2+'，取较大值']);
   } else if(p.hero==='kuanglan'){
     var range=6;
-    var targets=data.players.filter(function(o){ return o.id!==p.id && Math.abs(o.position-p.position)<=range; });
+    /* 组队模式下排除自己的队友，军威赫赫的余波不会扫到队友身上 */
+    var targets=data.players.filter(function(o){ return isValidEnemyTarget(data,p,o) && Math.abs(o.position-p.position)<=range; });
     var killedSomeone=false;
     targets.forEach(function(o){
       /* 保护状态要在"随机移除一项效果"之前就判定好——否则如果对方身上唯一的
@@ -518,7 +532,8 @@ export function mutUseSkill(data, playerId, targetId){
     }
     data.log = pushLog(data.log, moshandaoLog);
   } else if(p.hero==='liyuan'){
-    var lyTargets=data.players.filter(function(o){ return o.id!==p.id; });
+    /* 组队模式下排除自己的队友，请君打榜只会偷敌方玩家 */
+    var lyTargets=data.players.filter(function(o){ return isValidEnemyTarget(data,p,o); });
     var lyTarget=lyTargets[Math.floor(Math.random()*lyTargets.length)];
     var lyHasCards = lyTarget.hand.length>0;
     var lyHasMoney = lyTarget.money>0;
@@ -769,8 +784,10 @@ function performRoll(data, p, base, extraNotes){
   var bonus = sumBuff(p,'STEP_BONUS') - sumBuff(p,'STEP_PENALTY');
   var notes = (extraNotes||[]).slice();
   if(p.hero==='zuihuayin'){
-    var enemyDebuffed = data.players.some(function(o){ return o.id!==p.id && sumBuff(o,'STEP_PENALTY')>0; });
-    if(enemyDebuffed){ bonus+=3; notes.push('醉花阴被动：敌方带减益，额外 +3 步'); }
+    /* 场上"别人"带减益就触发，不区分敌我——组队模式下队友带减益一样算，
+       跟主动技能"只打敌方"是两回事，不要混在一起改。 */
+    var someoneElseDebuffed = data.players.some(function(o){ return o.id!==p.id && sumBuff(o,'STEP_PENALTY')>0; });
+    if(someoneElseDebuffed){ bonus+=3; notes.push('醉花阴被动：场上有人带减益，额外 +3 步'); }
   }
   if(findHandIndex(p,'haozhao')>-1){
     /* 好兆骰：点数1-2 => +3，4-5 => +2，6 => +1，点数为3时无加成 */

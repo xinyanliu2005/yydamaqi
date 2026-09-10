@@ -27,5 +27,8 @@ create policy "anyone can create games" on games
 create policy "anyone can update games" on games
   for update using (true);
 
+create policy "anyone can delete games" on games
+  for delete using (true);
+
 -- 打开这张表的实时推送，浏览器才能通过 postgres_changes 监听到别的玩家的操作。
 alter publication supabase_realtime add table games;

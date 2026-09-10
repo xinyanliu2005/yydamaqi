@@ -41,8 +41,10 @@ export function pushLog(log,text){
    - round < 3：用"早期"权重表（新手卡+被动卡常见，奇袭类很少见，部分卡完全不会出现）
    - round >= 3：用"中期"权重表（干扰/进攻类卡牌变多）
    - milestoneBoost：true 表示"已经有玩家冲到全程80%，且当前抽卡的不是那个人"，
-     这时候在上面任一档权重的基础上，再给奇袭类卡牌加权重（可能让它们从0变成可抽到）。 */
-function computeCardWeights(round, milestoneBoost){
+     这时候在上面任一档权重的基础上，再给奇袭类卡牌加权重（可能让它们从0变成可抽到）。
+   - mode：组队模式（2v2）专属的卡牌（teammateOnly，比如有钱任性/排忧解难）在
+     单人混战模式下没有队友可以送，直接把权重归零，商店/免费发牌都不会抽到。 */
+function computeCardWeights(round, milestoneBoost, mode){
   var base = (round && round>=3) ? STORE_WEIGHTS_MID : STORE_WEIGHTS_EARLY;
   var weights={};
   Object.keys(CARDS).forEach(function(k){ weights[k] = base[k]!=null ? base[k] : 1; });
@@ -51,24 +53,27 @@ function computeCardWeights(round, milestoneBoost){
       weights[k] = (weights[k]||0) + MILESTONE_SURPRISE_ATTACK_BOOST[k];
     });
   }
+  if(mode!=='2v2'){
+    Object.keys(CARDS).forEach(function(k){ if(CARDS[k].teammateOnly) weights[k]=0; });
+  }
   return weights;
 }
 
 /* 免费发牌（每轮发2张）、千金取义（抽2张）用这个——按权重抽1张，可以重复。 */
-export function drawCard(round, milestoneBoost){
-  var k = weightedPickOne(computeCardWeights(round, milestoneBoost));
+export function drawCard(round, milestoneBoost, mode){
+  var k = weightedPickOne(computeCardWeights(round, milestoneBoost, mode));
   return {uid:uid(), key:k};
 }
 
 /* 商店每一页 5 张卡牌互不重复，按权重抽。 */
-export function genStoreOffer(round, milestoneBoost){
-  return weightedPickWithoutReplacement(computeCardWeights(round, milestoneBoost), 5);
+export function genStoreOffer(round, milestoneBoost, mode){
+  return weightedPickWithoutReplacement(computeCardWeights(round, milestoneBoost, mode), 5);
 }
 
-export function newPlayer(id,name,hero){
+export function newPlayer(id,name,hero,mode){
   return {
     id:id, name:name, hero:hero, money:0, position:0, hand:[], buffs:[], skillCooldown:0,
-    storeOffer:genStoreOffer(0,false), storeRefreshCount:0,
+    storeOffer:genStoreOffer(0,false,mode), storeRefreshCount:0,
     cardsPlayedThisRound:[], /* 墨山道被动用：这一轮打出过的不同卡牌种类，每轮开始重置 */
     team:null, /* 只在组队模式（2v2）下有意义：'A' 或 'B'，大厅里由房主分配 */
     qingxiSavedCount:0, /* 青溪被动用：这一轮里，队友已经替自己化解过几次奇袭（决定下一次代价翻几倍），每轮开始重置 */
@@ -84,10 +89,18 @@ export function grantRoundResources(data, playerId){
   if(!p) return;
   p.money += 30;
   var milestoneBoost = !!data.milestone80PlayerId && data.milestone80PlayerId!==playerId;
-  p.hand.push(drawCard(data.round, milestoneBoost));
-  p.hand.push(drawCard(data.round, milestoneBoost));
+  p.hand.push(drawCard(data.round, milestoneBoost, data.mode));
+  p.hand.push(drawCard(data.round, milestoneBoost, data.mode));
   p.cardsPlayedThisRound = []; /* 新的一轮开始，墨山道被动的计数清零重新算 */
   p.qingxiSavedCount = 0; /* 新的一轮开始，青溪被动的翻倍计数也清零重新算 */
+}
+
+/* 好兆骰/好运骰/聚宝盆这3张"幸运牌"，集齐全部3张才享受这个额外福利——
+   每次轮到自己的回合开始时多摸1张随机卡牌（3张各自的效果仍然独立生效，
+   见 performRoll；只集齐2张时改用组合效果，不享受这条摸牌福利）。 */
+var LUCKY_CARD_KEYS = ['haozhao','haoyunshai','jubaopen'];
+function hasAllLuckyCards(p){
+  return LUCKY_CARD_KEYS.every(function(k){ return p.hand.some(function(c){ return c.key===k; }); });
 }
 
 /* 轮到"这名玩家自己的回合"时才结算的个人状态——技能冷却递减、商店刷新次数重置。
@@ -97,4 +110,9 @@ export function grantTurnStart(data, playerId){
   if(!p) return;
   if(p.skillCooldown>0) p.skillCooldown -= 1;
   p.storeRefreshCount = 0; /* 新回合开始，本回合第一次"换一批"重新变为免费 */
+  if(hasAllLuckyCards(p)){
+    var milestoneBoost = !!data.milestone80PlayerId && data.milestone80PlayerId!==playerId;
+    p.hand.push(drawCard(data.round, milestoneBoost, data.mode));
+    data.log = pushLog(data.log, p.name+' 集齐好兆骰/好运骰/聚宝盆，回合开始额外获得1张随机卡牌');
+  }
 }

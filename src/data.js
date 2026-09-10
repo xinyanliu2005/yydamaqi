@@ -79,7 +79,7 @@ export var CARDS = {
     desc:'被动：只要留在口袋里，就能抵御一次「奇袭」类卡牌（如凌虚一指）——被奇袭时自动消耗掉，本次奇袭完全无效',
     needsTarget:false, passive:true },
   haozhao:  { key:'haozhao', name:'好兆骰', price:30,
-    desc:'被动：只要留在口袋里，掷骰点数为1-3时额外+3步，4-5时额外+2步，6时额外+1步',
+    desc:'被动：只要留在口袋里，掷骰点数为1-3时额外+3步，4-6时额外+1步。若同时持有好运骰/聚宝盆中恰好1张（合计2张幸运牌），改用统一的组合效果：点数≤4时+3步，≥5时+1步并额外获得1张随机卡牌；若3张全部持有，则各自独立生效，并且每次轮到自己的回合开始时额外获得1张随机卡牌',
     needsTarget:false, passive:true },
 
   /* “奇袭”类：可以被 无相金身 格挡 */
@@ -107,7 +107,7 @@ export var CARDS = {
     desc:'奇袭：无视距离，对当前排名第一的玩家（如果就是自己则改为第二名）发起奇袭，使其跳过下一回合；命中后目标额外倒退5格（若被「无相金身」格挡或对方处于保护状态，则完全无效）',
     needsTarget:false, surpriseAttack:true },
   jubaopen: { key:'jubaopen', name:'聚宝盆', price:30,
-    desc:'被动：只要留在口袋里，自己金钱超过30元时+2步，超过80元时改为+4步（两档不叠加，按最高档计算）',
+    desc:'被动：只要留在口袋里，自己金钱超过30元时+2步，超过80元时改为+4步（两档不叠加，按最高档计算）。若同时持有好兆骰/好运骰中恰好1张（合计2张幸运牌），改用统一的组合效果，见好兆骰说明；3张全部持有则各自独立生效，并额外获得回合开始摸牌',
     needsTarget:false, passive:true },
 
   qiaoshan: { key:'qiaoshan', name:'敲山震虎', price:20,
@@ -117,7 +117,7 @@ export var CARDS = {
   pofuchenzhou: { key:'pofuchenzhou', name:'破釜沉舟', price:15,
     desc:'立即花费20元，获得2张【凌虚一指】（金钱不足20元时无法使用）',
     needsTarget:false },
-  sancai: { key:'sancai', name:'散财消灾', price:20,
+  sancai: { key:'sancai', name:'散财消灾', price:15,
     desc:'被动：只要留在口袋里，被「奇袭」命中时不会跳过回合，而是改为损失20元（优先级高于无相金身）；若金钱不足20元，这张卡不生效，本次奇袭正常命中。触发一次就消耗掉这张卡',
     needsTarget:false, passive:true },
   qianlimu: { key:'qianlimu', name:'千里目', price:30,
@@ -132,7 +132,38 @@ export var CARDS = {
      挑目标；组队模式（2v2）下可以选择帮自己还是帮队友。 */
   miaoshouhuichun: { key:'miaoshouhuichun', name:'妙手回春', price:20,
     desc:'使用后立即对自己（或组队模式下的队友）生效：若目标当前没有减益，获得+4步增益（持续2回合）；若目标有减益，则清除所有减益，并改为获得+2步增益（持续2回合）。无法在商店购买，只能通过青溪的【坐看云起】获得',
-    needsTarget:false, teamTargetable:true }
+    needsTarget:false, teamTargetable:true },
+
+  /* teammateOnly：只在组队模式（2v2）下有意义——单人混战没有队友可以给，
+     这两张卡在 1vN 模式下商店/免费发牌的权重直接是 0（见 computeCardWeights），
+     打出时也固定送给队友，不用挑目标（队友只有一个，没什么好选的）。 */
+  youqianrenxing: { key:'youqianrenxing', name:'有钱任性', price:15,
+    desc:'把自己当前一半的金钱送给队友（组队模式专属）',
+    needsTarget:false, teammateOnly:true },
+  paiyoujienan: { key:'paiyoujienan', name:'排忧解难', price:15,
+    desc:'从自己口袋里随机抽1张卡牌送给队友（组队模式专属）',
+    needsTarget:false, teammateOnly:true },
+
+  /* 后发制人：单人混战模式没有队友，固定对自己生效；组队模式下可以选自己还是
+     队友。按"目标与当前第一名的差距占全程的百分比"分三档：差距>45%给得最多，
+     30%-45%次之，其余（含目标自己就是第一名）只有个小奖励。 */
+  houfazhiren: { key:'houfazhiren', name:'后发制人', price:15,
+    desc:'对自己或队友使用：目标落后当前第一名的差距超过全程45%，获得2张随机卡牌和下次掷骰+4步；30%-45%之间，获得1张随机卡牌和+2步；差距不足30%（含目标自己就是第一名），只获得+1步',
+    needsTarget:false, teamTargetable:true },
+
+  tuonidaishui: { key:'tuonidaishui', name:'拖泥带水', price:15,
+    desc:'无视距离，锁定当前排名第一的玩家（组队模式下排除自己的队友），使其接下来2回合 -3 步（可被清风霁月解除）',
+    needsTarget:false },
+  cunbunanxing: { key:'cunbunanxing', name:'寸步难行', price:15,
+    desc:'无视距离，锁定当前排名第一的玩家（组队模式下排除自己的队友），使其下一次掷骰无论有多少增益/减益，最终都只能移动1步（可被清风霁月解除）',
+    needsTarget:false },
+
+  haoyunshai: { key:'haoyunshai', name:'好运骰', price:30,
+    desc:'被动：只要留在口袋里，掷骰点数≥5时额外获得1张随机卡牌。与好兆骰/聚宝盆的组合效果见好兆骰说明',
+    needsTarget:false, passive:true },
+  zhuibuling: { key:'zhuibuling', name:'追捕令', price:30,
+    desc:'被动：只要留在口袋里，自己每一次成功命中的奇袭（不含被防住/被保护免疫的）都立即额外获得30元',
+    needsTarget:false, passive:true }
 };
 
 export var PLAYER_COLORS = ['#c1452c','#c9a24b','#4d7eb0','#9a5cc0'];
@@ -209,7 +240,11 @@ export var STORE_WEIGHTS_EARLY = { /* 第1-2轮：新手卡 + 被动卡常见，
   wuxiang:8, haozhao:8, sadaliuxing:8, jubaopen:8, sancai:8,
   lingxu:1, lingyun:1, qianlimu:1, yizhiqianjin:1,
   daodao:0, shihou:0, shexing:0, liangshang:0, qiaoshan:0, pofuchenzhou:0,
-  miaoshouhuichun:0 /* 只能靠青溪的技能获得，商店/免费发牌永远不会抽到 */
+  miaoshouhuichun:0, /* 只能靠青溪的技能获得，商店/免费发牌永远不会抽到 */
+  youqianrenxing:8, paiyoujienan:8, /* 组队模式专属，1vN下权重会被强制归零，见 computeCardWeights */
+  houfazhiren:1, /* 落后差距早期基本不存在，跟凌虚一指/凌云踏一样早期少见 */
+  tuonidaishui:0, cunbunanxing:0, /* 针对"当前第一名"的干扰卡，早期没有明显领先者，跟其他干扰卡一样第3轮才出现 */
+  haoyunshai:8, zhuibuling:8 /* 跟其他30元被动卡（好兆骰/飒沓流星/聚宝盆）一样，早期常见 */
 };
 export var STORE_WEIGHTS_MID = { /* 第3轮起：干扰/进攻类卡牌成为主流 */
   lingxu:8, lingyun:8, daodao:8, shexing:8, liangshang:8,
@@ -217,7 +252,11 @@ export var STORE_WEIGHTS_MID = { /* 第3轮起：干扰/进攻类卡牌成为主
   yinyang:2, shengcai:2, qingfeng:2, jinyu:2,
   wuxiang:2, haozhao:2, sadaliuxing:2, jubaopen:2, sancai:2,
   shihou:0, qiaoshan:0,
-  miaoshouhuichun:0
+  miaoshouhuichun:0,
+  youqianrenxing:2, paiyoujienan:2,
+  houfazhiren:8,
+  tuonidaishui:8, cunbunanxing:8,
+  haoyunshai:2, zhuibuling:2
 };
 /* 达成80%里程碑后，"非率先冲刺者"抽卡时额外叠加的权重——奇袭类卡牌变得更常见，
    给落后的玩家更多反打领先者的机会。 */

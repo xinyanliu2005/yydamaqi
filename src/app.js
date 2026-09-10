@@ -43,7 +43,7 @@ function createRoom(name, heroKey, mode){
   var initial={
     code:code, status:'lobby', createdAt:Date.now(), hostId:runtime.myId,
     mode:mode||'1vn', /* '1vn'：单人混战（默认）；'2v2'：组队模式，需要正好4人、房主在大厅分好队 */
-    players:[newPlayer(runtime.myId,name,heroKey)],
+    players:[newPlayer(runtime.myId,name,heroKey,mode||'1vn')],
     turnOrder:[], turnIndex:0,
     turnState:{rolled:false, skillUsed:false, lastRoll:null},
     log:[{ts:Date.now(), text:'房间创建，等待玩家加入…'}],

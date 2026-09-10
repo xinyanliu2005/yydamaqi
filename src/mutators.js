@@ -32,11 +32,11 @@ function checkWinCondition(data, p){
 
 /* 能被"解除减益"类效果（清风霁月、不羡仙、妙手回春）清除的减益类型——
    千夜（STEP_PENALTY）、无相皇（SKILL_LOCKED）、凌虚一指等奇袭造成的跳过回合
-   （SKIP_TURN）、独夫（CARD_LOCKED）都算；黑衣女子（DEFENSE_DISABLED）、
-   望月婵媛（HARD_SKIP_TURN）故意不在这个集合里——按设计就是"无法被任何
-   效果解除"。 */
+   （SKIP_TURN）、独夫（CARD_LOCKED）、寸步难行（MOVEMENT_CAP）都算；
+   黑衣女子（DEFENSE_DISABLED）、望月婵媛（HARD_SKIP_TURN）故意不在这个
+   集合里——按设计就是"无法被任何效果解除"。 */
 function isRemovableDebuff(b){
-  return b.type==='STEP_PENALTY' || b.type==='SKILL_LOCKED' || b.type==='SKIP_TURN' || b.type==='CARD_LOCKED';
+  return b.type==='STEP_PENALTY' || b.type==='SKILL_LOCKED' || b.type==='SKIP_TURN' || b.type==='CARD_LOCKED' || b.type==='MOVEMENT_CAP';
 }
 
 /* 特殊格子效果——落在哪一格是每局开局时随机分配好的（见 mutStart 里的
@@ -107,8 +107,8 @@ function resolveGridEffect(data, p){
       data.log = pushLog(data.log, p.name+' 踩到【熔炉】，但当前还有其他玩家的熔炉弃牌待处理，这次触发被跳过');
     } else {
       var ronlgMilestoneBoost = !!data.milestone80PlayerId && data.milestone80PlayerId!==p.id;
-      p.hand.push(drawCard(data.round, ronlgMilestoneBoost));
-      p.hand.push(drawCard(data.round, ronlgMilestoneBoost));
+      p.hand.push(drawCard(data.round, ronlgMilestoneBoost, data.mode));
+      p.hand.push(drawCard(data.round, ronlgMilestoneBoost, data.mode));
       data.pendingDiscard = {playerId:p.id, count:2};
       data.log = pushLog(data.log, p.name+' 踩到【熔炉】，获得2张随机卡牌，需要从手牌中弃置2张（含新卡）');
     }
@@ -148,11 +148,11 @@ function resolveGridEffect(data, p){
       data.log = pushLog(data.log, p.name+' 踩到【肥猫】，掷出'+fmRoll+'点，获得20元');
     } else if(fmRoll<=5){
       p.money += 20;
-      p.hand.push(drawCard(data.round, fmBoost));
+      p.hand.push(drawCard(data.round, fmBoost, data.mode));
       data.log = pushLog(data.log, p.name+' 踩到【肥猫】，掷出'+fmRoll+'点，获得20元和1张随机卡牌');
     } else {
       p.money += 30;
-      p.hand.push(drawCard(data.round, fmBoost));
+      p.hand.push(drawCard(data.round, fmBoost, data.mode));
       data.log = pushLog(data.log, p.name+' 踩到【肥猫】，掷出6点，获得30元和1张随机卡牌');
     }
   } else if(effectKey==='foguangding'){
@@ -368,6 +368,10 @@ function onSurpriseAttackSuccess(data, attacker){
     data.log = pushLog(data.log, attacker.name+' 凭借【飒沓流星】，奇袭命中后额外前进6格（到达第'+attacker.position+'格）');
     checkWinCondition(data, attacker);
   }
+  if(findHandIndex(attacker,'zhuibuling')>-1){
+    attacker.money += 30;
+    data.log = pushLog(data.log, attacker.name+' 凭借【追捕令】，奇袭命中后立即获得30元');
+  }
 }
 
 /* 把 data.turnIndex 往后推进一步，如果对方身上有【凌虚一指】/【军威赫赫】造成的
@@ -403,7 +407,7 @@ export function mutJoin(data, id, name, hero){
   if(data.status!=='lobby') return {error:'游戏已经开始，无法加入'};
   if(findPlayer(data,id)) return {data:data};
   if(data.players.length>=4) return {error:'房间已满（最多4人）'};
-  data.players.push(newPlayer(id,name,hero));
+  data.players.push(newPlayer(id,name,hero,data.mode));
   data.log = pushLog(data.log, name+' 加入了房间');
   return {data:data};
 }
@@ -494,7 +498,7 @@ export function mutStart(data, requesterId){
   order.forEach(function(pid){
     grantRoundResources(data, pid);
     var pl = findPlayer(data, pid);
-    pl.storeOffer = genStoreOffer(data.round, false); /* 第1轮不可能有人已到80% */
+    pl.storeOffer = genStoreOffer(data.round, false, data.mode); /* 第1轮不可能有人已到80% */
   });
   applyTianquanStartingBonus(data);
   grantTurnStart(data, order[0]);
@@ -517,7 +521,7 @@ export function mutRestart(data, requesterId){
     p.hand = [];
     p.buffs = [];
     p.skillCooldown = 0;
-    p.storeOffer = genStoreOffer(0, false);
+    p.storeOffer = genStoreOffer(0, false, data.mode);
     p.storeRefreshCount = 0;
     p.cardsPlayedThisRound = [];
     p.qingxiSavedCount = 0;
@@ -556,7 +560,7 @@ export function mutUseSkill(data, playerId, targetId){
     if(p.money<20) return {error:'金钱不足，千金取义需要20元'};
     p.money -= 20;
     var tqMilestoneBoost = !!data.milestone80PlayerId && data.milestone80PlayerId!==p.id;
-    p.hand.push(drawCard(data.round, tqMilestoneBoost)); p.hand.push(drawCard(data.round, tqMilestoneBoost));
+    p.hand.push(drawCard(data.round, tqMilestoneBoost, data.mode)); p.hand.push(drawCard(data.round, tqMilestoneBoost, data.mode));
     data.log = pushLog(data.log, p.name+' 使用【千金取义】，花费20元获得2张随机卡牌');
   } else if(p.hero==='zuihuayin'){
     /* 对场上所有其他玩家一起施加减益，不用挑目标；组队模式下排除自己的队友，
@@ -621,13 +625,13 @@ export function mutUseSkill(data, playerId, targetId){
     data.log = pushLog(data.log, p.name+' 使用【坐看云起】，获得一张【妙手回春】');
   } else if(p.hero==='moshandao'){
     var mBoost=!!data.milestone80PlayerId && data.milestone80PlayerId!==p.id;
-    p.hand.push(drawCard(data.round, mBoost)); p.hand.push(drawCard(data.round, mBoost));
+    p.hand.push(drawCard(data.round, mBoost, data.mode)); p.hand.push(drawCard(data.round, mBoost, data.mode));
     var moshandaoLog = p.name+' 使用【兼爱非攻】，获得2张随机卡牌';
     if(data.mode==='2v2' && p.team){
       var moshandaoMate = data.players.find(function(o){ return o.id!==p.id && o.team===p.team; });
       if(moshandaoMate){
         var mateBoost=!!data.milestone80PlayerId && data.milestone80PlayerId!==moshandaoMate.id;
-        moshandaoMate.hand.push(drawCard(data.round, mateBoost)); moshandaoMate.hand.push(drawCard(data.round, mateBoost));
+        moshandaoMate.hand.push(drawCard(data.round, mateBoost, data.mode)); moshandaoMate.hand.push(drawCard(data.round, mateBoost, data.mode));
         moshandaoLog += '，队友 '+moshandaoMate.name+' 也获得2张随机卡牌';
       }
     }
@@ -830,6 +834,56 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
       addBuff(tMSHC,'STEP_BONUS',4,2,'card:miaoshouhuichun','妙手回春');
       data.log = pushLog(data.log, mshcSelf ? (p.name+' 使用【妙手回春】，获得 +4 步增益（持续2回合）') : (p.name+' 对 '+tMSHC.name+' 使用【妙手回春】，获得 +4 步增益（持续2回合）'));
     }
+  } else if(cardKey==='youqianrenxing'){
+    if(data.mode!=='2v2' || !p.team) return {error:'只有组队模式下才能使用这张卡'};
+    var mateYQ = data.players.find(function(o){ return o.id!==p.id && o.team===p.team; });
+    if(!mateYQ) return {error:'找不到队友'};
+    var giveMoney = Math.floor(p.money/2);
+    p.money -= giveMoney;
+    mateYQ.money += giveMoney;
+    data.log = pushLog(data.log, p.name+' 使用【有钱任性】，把 '+giveMoney+' 元分给了队友 '+mateYQ.name);
+  } else if(cardKey==='paiyoujienan'){
+    if(data.mode!=='2v2' || !p.team) return {error:'只有组队模式下才能使用这张卡'};
+    var matePY = data.players.find(function(o){ return o.id!==p.id && o.team===p.team; });
+    if(!matePY) return {error:'找不到队友'};
+    if(p.hand.length===0) return {error:'口袋里没有卡牌可以送'};
+    var pyIdx = Math.floor(Math.random()*p.hand.length);
+    var pyCard = p.hand.splice(pyIdx,1)[0];
+    matePY.hand.push(pyCard);
+    data.log = pushLog(data.log, p.name+' 使用【排忧解难】，把一张卡牌送给了队友 '+matePY.name+'（内容对其他人保密）');
+  } else if(cardKey==='houfazhiren'){
+    /* 单人混战模式没有队友，固定对自己生效；组队模式下可以选队友 */
+    var tHF = resolveBuffTarget(data, p, targetId);
+    if(!tHF) return {error:'目标无效'};
+    var hfSelf = tHF.id===p.id;
+    var hfLeader = findLeader(data);
+    var hfGapRatio = (hfLeader.position - tHF.position) / WIN_POS;
+    var hfWho = hfSelf ? p.name : ('队友 '+tHF.name);
+    if(hfGapRatio > 0.45){
+      var hfBoost1 = !!data.milestone80PlayerId && data.milestone80PlayerId!==tHF.id;
+      tHF.hand.push(drawCard(data.round, hfBoost1, data.mode));
+      tHF.hand.push(drawCard(data.round, hfBoost1, data.mode));
+      addBuff(tHF,'STEP_BONUS',4,1,'card:houfazhiren','后发制人');
+      data.log = pushLog(data.log, p.name+' 对 '+hfWho+' 使用【后发制人】，落后当前第一名超过全程45%，获得2张随机卡牌，下次掷骰 +4 步');
+    } else if(hfGapRatio >= 0.30){
+      var hfBoost2 = !!data.milestone80PlayerId && data.milestone80PlayerId!==tHF.id;
+      tHF.hand.push(drawCard(data.round, hfBoost2, data.mode));
+      addBuff(tHF,'STEP_BONUS',2,1,'card:houfazhiren','后发制人');
+      data.log = pushLog(data.log, p.name+' 对 '+hfWho+' 使用【后发制人】，落后当前第一名30%-45%，获得1张随机卡牌，下次掷骰 +2 步');
+    } else {
+      addBuff(tHF,'STEP_BONUS',1,1,'card:houfazhiren','后发制人');
+      data.log = pushLog(data.log, p.name+' 对 '+hfWho+' 使用【后发制人】，落后当前第一名不足30%，下次掷骰 +1 步');
+    }
+  } else if(cardKey==='tuonidaishui'){
+    /* 无视距离，锁定当前排名第一的玩家；组队模式下排除自己的队友 */
+    var tdTarget = findLeaderExcludingTeam(data, p);
+    addBuff(tdTarget,'STEP_PENALTY',3,2,'card:tuonidaishui','拖泥带水');
+    data.log = pushLog(data.log, p.name+' 对 '+tdTarget.name+' 使用【拖泥带水】，接下来2回合 -3 步');
+  } else if(cardKey==='cunbunanxing'){
+    /* 无视距离，锁定当前排名第一的玩家；组队模式下排除自己的队友 */
+    var cbTarget = findLeaderExcludingTeam(data, p);
+    addBuff(cbTarget,'MOVEMENT_CAP',1,1,'card:cunbunanxing','寸步难行');
+    data.log = pushLog(data.log, p.name+' 对 '+cbTarget.name+' 使用【寸步难行】，下一次掷骰无论有多少增益/减益，最终都只能移动1步');
   } else {
     return {error:'未知卡牌'};
   }
@@ -886,7 +940,7 @@ export function mutRefreshStore(data, playerId){
   p.money -= cost;
   p.storeRefreshCount = count+1;
   var milestoneBoost = !!data.milestone80PlayerId && data.milestone80PlayerId!==p.id;
-  p.storeOffer = genStoreOffer(data.round, milestoneBoost);
+  p.storeOffer = genStoreOffer(data.round, milestoneBoost, data.mode);
   return {data:data};
 }
 
@@ -902,21 +956,46 @@ function performRoll(data, p, base, extraNotes){
     var someoneElseDebuffed = data.players.some(function(o){ return o.id!==p.id && sumBuff(o,'STEP_PENALTY')>0; });
     if(someoneElseDebuffed){ bonus+=3; notes.push('醉花阴被动：场上有人带减益，额外 +3 步'); }
   }
-  if(findHandIndex(p,'haozhao')>-1){
-    /* 好兆骰：点数1-3 => +3，4-5 => +2，6 => +1 */
-    var luckyBonus = base<=3 ? 3 : (base<=5 ? 2 : 1);
-    if(luckyBonus>0){ bonus+=luckyBonus; notes.push('好兆骰：+'+luckyBonus+'步'); }
+  /* 好兆骰/好运骰/聚宝盆这3张"幸运牌"——集齐几张会互相影响：
+     - 只有0或1张：各自独立生效，用各自原本的规则（好兆骰：点数<=3 +3步，
+       >=4 +1步；好运骰：点数>=5 额外摸1张卡；聚宝盆：金钱>80 +4步，
+       >30 +2步，两档不叠加）。
+     - 恰好2张（不管是哪2张）：不再各自判定，统一改用组合公式——点数<=4
+       +3步，>=5 +1步并额外摸1张卡，取代那2张各自的规则，避免两条规则
+       各自触发导致重复加成。
+     - 3张全部持有：3张各自的规则照常独立生效（不套用上面的组合公式），
+       另外每次轮到自己回合开始时还会额外摸1张卡，见 game-logic.js 的
+       grantTurnStart。 */
+  var luckyHeld = ['haozhao','haoyunshai','jubaopen'].filter(function(k){ return findHandIndex(p,k)>-1; });
+  if(luckyHeld.length===2){
+    if(base<=4){
+      bonus+=3; notes.push('幸运牌组合（2张）：+3步');
+    } else {
+      bonus+=1;
+      var luckyBoost = !!data.milestone80PlayerId && data.milestone80PlayerId!==p.id;
+      p.hand.push(drawCard(data.round, luckyBoost, data.mode));
+      notes.push('幸运牌组合（2张）：+1步并额外获得1张随机卡牌');
+    }
+  } else {
+    if(findHandIndex(p,'haozhao')>-1){
+      var luckyBonus = base<=3 ? 3 : 1;
+      if(luckyBonus>0){ bonus+=luckyBonus; notes.push('好兆骰：+'+luckyBonus+'步'); }
+    }
+    if(findHandIndex(p,'haoyunshai')>-1 && base>=5){
+      var hysBoost = !!data.milestone80PlayerId && data.milestone80PlayerId!==p.id;
+      p.hand.push(drawCard(data.round, hysBoost, data.mode));
+      notes.push('好运骰：额外获得1张随机卡牌');
+    }
+    if(findHandIndex(p,'jubaopen')>-1){
+      var richBonus = p.money>80 ? 4 : (p.money>30 ? 2 : 0);
+      if(richBonus>0){ bonus+=richBonus; notes.push('聚宝盆：+'+richBonus+'步'); }
+    }
   }
   if(p.hero==='guyun'){
     var leader=findLeader(data);
     var gap=leader.position-p.position;
     var gapBonus = gap>=10 ? 7 : (gap>=5 ? 5 : (gap>=3 ? 2 : 0));
     if(gapBonus>0){ bonus+=gapBonus; notes.push('孤云被动：落后领先者'+gap+'格，额外 +'+gapBonus+'步'); }
-  }
-  if(findHandIndex(p,'jubaopen')>-1){
-    /* 聚宝盆：按金钱数量分档，只取最高档，不叠加 */
-    var richBonus = p.money>80 ? 4 : (p.money>30 ? 2 : 0);
-    if(richBonus>0){ bonus+=richBonus; notes.push('聚宝盆：+'+richBonus+'步'); }
   }
   if(p.hero==='liyuan'){
     /* 落后当前第一名超过5格才加成；自己就是第一名时 gap 为0，自然不会触发 */
@@ -938,8 +1017,16 @@ function performRoll(data, p, base, extraNotes){
     var moshandaoBonus = Math.min(2, moshandaoDistinct);
     if(moshandaoBonus>0){ bonus+=moshandaoBonus; notes.push('墨山道被动：这一轮打出过'+moshandaoDistinct+'种卡牌，+'+moshandaoBonus+'步'); }
   }
-  var passiveNote = notes.length ? ('（'+notes.join('；')+'）') : '';
   var finalSteps = Math.max(0, base+bonus);
+  /* 寸步难行：不管上面算出多少增益/减益，这一次掷骰最终都只能移动1步——
+     放在所有加成算完、finalSteps 定下来之后再覆盖，确保是"最终步数"层面的
+     硬性上限，而不是跟其他 buff 一起参与加减法。 */
+  var capBuff = p.buffs.filter(function(b){ return b.type==='MOVEMENT_CAP' && b.turnsLeft>0; })[0];
+  if(capBuff){
+    finalSteps = capBuff.value;
+    notes.push('寸步难行：本回合最终只能移动'+finalSteps+'步');
+  }
+  var passiveNote = notes.length ? ('（'+notes.join('；')+'）') : '';
   var moneyGain=0;
   p.buffs.forEach(function(b){ if(b.type==='MONEY_PER_STEP' && b.turnsLeft>0) moneyGain+=finalSteps; });
   p.money += moneyGain;
@@ -993,8 +1080,8 @@ export function mutResolveGridChoice(data, playerId, option){
       data.log = pushLog(data.log, p.name+' 在【鲁菜】效应中选择了下回合 +3 步');
     } else if(option==='cards'){
       var luchaiMilestoneBoost = !!data.milestone80PlayerId && data.milestone80PlayerId!==p.id;
-      p.hand.push(drawCard(data.round, luchaiMilestoneBoost));
-      p.hand.push(drawCard(data.round, luchaiMilestoneBoost));
+      p.hand.push(drawCard(data.round, luchaiMilestoneBoost, data.mode));
+      p.hand.push(drawCard(data.round, luchaiMilestoneBoost, data.mode));
       data.log = pushLog(data.log, p.name+' 在【鲁菜】效应中选择了2张随机卡牌');
     } else {
       return {error:'请选择一个有效选项'};
@@ -1043,7 +1130,7 @@ export function mutEndTurn(data, playerId){
     data.players.forEach(function(pl){
       grantRoundResources(data, pl.id);
       var milestoneBoost = !!data.milestone80PlayerId && data.milestone80PlayerId!==pl.id;
-      pl.storeOffer = genStoreOffer(data.round, milestoneBoost);
+      pl.storeOffer = genStoreOffer(data.round, milestoneBoost, data.mode);
     });
     data.log = pushLog(data.log, '第 '+data.round+' 轮开始，所有玩家同时获得资源，商店已自动刷新');
   }

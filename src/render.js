@@ -21,14 +21,19 @@ export function heroGridHtml(selectedKey){
   }).join('');
 }
 
+var NEG_BUFF_TYPES = ['STEP_PENALTY','SKIP_TURN','SKILL_LOCKED','CARD_LOCKED','DEFENSE_DISABLED','HARD_SKIP_TURN'];
 export function buffChipsHtml(p){
   if(!p.buffs.length) return '';
   return '<div class="buff-row">'+p.buffs.map(function(b){
-    var cls = (b.type==='STEP_PENALTY' || b.type==='SKIP_TURN' || b.type==='SKILL_LOCKED')?'neg':'pos';
+    var cls = NEG_BUFF_TYPES.indexOf(b.type)>-1 ? 'neg' : 'pos';
     var txt = b.type==='STEP_BONUS' ? ('+'+b.value+'步 '+b.label)
       : b.type==='STEP_PENALTY' ? ('-'+b.value+'步 '+b.label)
       : b.type==='SKIP_TURN' ? ('将跳过回合 '+b.label)
+      : b.type==='HARD_SKIP_TURN' ? ('将跳过回合（无法解除）'+b.label)
       : b.type==='SKILL_LOCKED' ? ('技能封印 '+b.label)
+      : b.type==='CARD_LOCKED' ? ('卡牌封印 '+b.label)
+      : b.type==='DEFENSE_DISABLED' ? ('无法防御奇袭（无法解除）'+b.label)
+      : b.type==='INFINITE_RANGE' ? ('奇袭距离不受限 '+b.label)
       : ('生财 '+b.label);
     return '<span class="buff-chip '+cls+'">'+esc(txt)+'（剩'+b.turnsLeft+'回合）</span>';
   }).join('')+'</div>';
@@ -255,7 +260,7 @@ export function renderGame(app){
       '<div class="rsec"><b>无相金身</b>（商店价15元，被动）：留在口袋里可以抵御一次"奇袭"类卡牌，格挡后自身消耗掉；若同时持有散财消灾，优先触发散财消灾。</div>'+
       '<div class="rsec"><b>凌虚一指</b>（商店价15元，奇袭）：对你当前位置前后2格内的一名玩家使用（持有千里目则变为4格），使其跳过下一个回合；若对方持有散财消灾/无相金身则被防住、无效。同一名玩家一次只能被奇袭命中一次——已经"即将跳过回合"的玩家处于保护状态，要等TA的那次回合真正跳过之后才能再被奇袭。</div>'+
       '<div class="rsec"><b>梁上君子</b>（商店价15元）：偷走一名玩家15元（对方不足15元则偷走全部）。&nbsp; <b>摄星拿月</b>（商店价20元）：随机偷走一名玩家手牌中的1张卡牌。</div>'+
-      '<div class="rsec"><b>好兆骰</b>（商店价30元，被动）：留在口袋里时，掷骰点数1-2额外+3步，4-5额外+2步，6额外+1步（点数为3无加成）。</div>'+
+      '<div class="rsec"><b>好兆骰</b>（商店价30元，被动）：留在口袋里时，掷骰点数1-3额外+3步，4-5额外+2步，6额外+1步。</div>'+
       '<div class="rsec"><b>凌云踏</b>（商店价15元）：立即向前跳3/4/5/6格（自选），与本回合骰子移动叠加。</div>'+
       '<div class="rsec"><b>飒沓流星</b>（商店价30元，被动）：留在口袋里时，自己每一次成功命中的奇袭（不含被防住/被保护免疫的）都额外前进6格。&nbsp; <b>聚宝盆</b>（商店价30元，被动）：留在口袋里时，自己金钱超过30元+2步，超过80元改为+4步（不叠加，取最高档）。</div>'+
       '<div class="rsec"><b>叨叨不叨叨</b>（商店价15元）：销毁一名玩家手牌中随机1张卡牌，对方没有任何补偿。&nbsp; <b>狮吼正声</b>（商店价30元，奇袭）：无视距离，直接对当前排名第一的玩家（自己是第一则改打第二名）发起奇袭，命中后目标跳过下一回合并倒退5格；同样可被防住、对保护状态中的玩家无效。</div>'+
@@ -263,7 +268,7 @@ export function renderGame(app){
       '<div class="rsec"><b>破釜沉舟</b>（商店价15元）：立即花费20元，获得2张凌虚一指（第3轮起才常见）。&nbsp; <b>一掷千金</b>（商店价20元）：押上全部身家，花光当前金钱，前进（花掉的钱÷5）步，最多15步。</div>'+
       '<div class="rsec"><b>散财消灾</b>（商店价20元，被动）：留在口袋里时，被奇袭命中会改为损失20元、不会跳过回合（优先级高于无相金身）；若金钱不足20元则这张卡不生效，本次奇袭正常命中；触发一次就消耗掉。&nbsp; <b>千里目</b>（商店价30元，被动）：留在口袋里时，自己发起的凌虚一指奇袭距离额外 +2 格。</div>'+
       '<div class="rsec"><b>妙手回春</b>（无法在商店购买，只能通过青溪的【坐看云起】获得）：单人混战模式下不用挑目标，直接对自己生效；组队模式下可以选自己还是队友——若目标当前没有减益，获得 +4 步增益（持续2回合）；若目标有减益，则清除所有减益，并改为获得 +2 步增益（持续2回合）。</div>'+
-      '<div class="rsec"><b>特殊格子</b>：棋盘上有12种特殊效果，每种随机落在一个格子上（紫色边框、有小标记），不管是自己走到的还是被打过去的，只要停在那一格就会触发：'+
+      '<div class="rsec"><b>特殊格子</b>：棋盘上有20种特殊效果，每种随机落在一个格子上（紫色边框、有小标记），不管是自己走到的还是被打过去的，只要停在那一格就会触发：'+
         '<b>无相皇</b>——下一回合无法使用主动技能（可被清风霁月解除）；'+
         '<b>千夜</b>——接下来2回合 -3 步（可被清风霁月解除）；'+
         '<b>张万师</b>——立即掷一次骰子并倒退相应格数；'+
@@ -275,7 +280,16 @@ export function renderGame(app){
         '<b>鲁菜</b>——从20元 / 下回合+3步 / 2张随机卡牌中任选一项，选完才能继续掷骰子或结束回合；'+
         '<b>熔炉</b>——获得2张随机卡牌，然后必须从手牌中弃置2张，处理完才能继续掷骰子或结束回合；'+
         '<b>竹林小屋</b>——接下来2回合 +3 步；'+
-        '<b>不羡仙</b>——清除自身当前所有减益。'+
+        '<b>不羡仙</b>——清除自身当前所有减益；'+
+        '<b>独夫</b>——下一回合无法使用任何卡牌（可被清风霁月解除，清风霁月本身不受影响）；'+
+        '<b>黑衣女子</b>——接下来2回合，无相金身/散财消灾/青溪队友化解全部失效，被奇袭必定命中，无法被任何效果解除；'+
+        '<b>望月婵媛</b>——立即掷一次骰子，1-2点将跳过下一个回合，无法被任何效果解除；'+
+        '<b>肥猫</b>——立即掷一次骰子：1点倒退2格，2-3点获得20元，4-5点获得20元和1张卡牌，6点获得30元和1张卡牌；'+
+        '<b>佛光顶</b>——立即获得一张无相金身；'+
+        '<b>碧水云涛</b>——直到下回合结束前，自己的凌虚一指奇袭距离不受限制；'+
+        '<b>道主</b>——失去2张随机手牌；'+
+        '<b>黑财神</b>——损失20元；'+
+        '<b>樊楼</b>——下一次掷骰子的点数范围变成 -2 到 8（不是正常的1-6）。'+
       '</div>'+
     '</details>';
     html+='</div>';
@@ -390,8 +404,12 @@ export function renderGame(app){
     } else {
       winSubtitle = (w?esc(w.name):'')+' 率先抵达第'+WIN_POS+'格';
     }
+    var isHostFinished = game.hostId===myId;
     html+='<div class="winner-overlay"><div class="winner-box"><div class="wtitle">🏆 胜利！</div><div class="wname">'+winSubtitle+'</div>'+
-      '<button class="btn btn-gold" data-action="back-home-finished">返回首页</button></div></div>';
+      '<div class="wactions">'+
+        (isHostFinished ? '<button class="btn btn-gold" data-action="restart-game">再来一局（同一批人）</button>' : '<div class="footnote">等待房主开始下一局，或者返回首页</div>')+
+        '<button class="btn" data-action="back-home-finished">返回首页</button>'+
+      '</div></div></div>';
   }
 
   app.innerHTML = html;

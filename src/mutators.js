@@ -30,6 +30,15 @@ function checkWinCondition(data, p){
   }
 }
 
+/* 能被"解除减益"类效果（清风霁月、不羡仙、妙手回春）清除的减益类型——
+   千夜（STEP_PENALTY）、无相皇（SKILL_LOCKED）、凌虚一指等奇袭造成的跳过回合
+   （SKIP_TURN）、独夫（CARD_LOCKED）都算；黑衣女子（DEFENSE_DISABLED）、
+   望月婵媛（HARD_SKIP_TURN）故意不在这个集合里——按设计就是"无法被任何
+   效果解除"。 */
+function isRemovableDebuff(b){
+  return b.type==='STEP_PENALTY' || b.type==='SKILL_LOCKED' || b.type==='SKIP_TURN' || b.type==='CARD_LOCKED';
+}
+
 /* 特殊格子效果——落在哪一格是每局开局时随机分配好的（见 mutStart 里的
    data.gridEffects），不管是自己掷骰子走到的、还是被某张卡/技能送过去的
    （比如被"狮吼正声"打退到了一个特殊格上），只要最终停在这一格就会触发。
@@ -107,13 +116,64 @@ function resolveGridEffect(data, p){
     addBuff(p,'STEP_BONUS',3,2,'grid:zhulinxiaowu','竹林小屋');
     data.log = pushLog(data.log, p.name+' 踩到【竹林小屋】，接下来2回合 +3 步');
   } else if(effectKey==='buxianxian'){
-    var removedDebuffs = p.buffs.filter(function(b){ return b.type==='STEP_PENALTY'||b.type==='SKIP_TURN'||b.type==='SKILL_LOCKED'; });
+    var removedDebuffs = p.buffs.filter(isRemovableDebuff);
     if(removedDebuffs.length>0){
-      p.buffs = p.buffs.filter(function(b){ return !(b.type==='STEP_PENALTY'||b.type==='SKIP_TURN'||b.type==='SKILL_LOCKED'); });
+      p.buffs = p.buffs.filter(function(b){ return !isRemovableDebuff(b); });
       data.log = pushLog(data.log, p.name+' 踩到【不羡仙】，清除了身上所有减益（共'+removedDebuffs.length+'项）');
     } else {
       data.log = pushLog(data.log, p.name+' 踩到【不羡仙】，但身上暂时没有减益可清除');
     }
+  } else if(effectKey==='dufu'){
+    addBuff(p,'CARD_LOCKED',0,1,'grid:dufu','独夫');
+    data.log = pushLog(data.log, p.name+' 踩到【独夫】，下一回合无法使用任何卡牌（可被清风霁月解除）');
+  } else if(effectKey==='heiyinvzi'){
+    addBuff(p,'DEFENSE_DISABLED',0,2,'grid:heiyinvzi','黑衣女子');
+    data.log = pushLog(data.log, p.name+' 踩到【黑衣女子】，接下来2回合无法防御任何奇袭（无法被任何效果解除）');
+  } else if(effectKey==='wangyuechanyuan'){
+    var wyRoll = 1+Math.floor(Math.random()*6);
+    if(wyRoll<=2){
+      addBuff(p,'HARD_SKIP_TURN',0,1,'grid:wangyuechanyuan','望月婵媛');
+      data.log = pushLog(data.log, p.name+' 踩到【望月婵媛】，掷出 '+wyRoll+' 点，将跳过下一个回合（无法被任何效果解除）');
+    } else {
+      data.log = pushLog(data.log, p.name+' 踩到【望月婵媛】，掷出 '+wyRoll+' 点，有惊无险');
+    }
+  } else if(effectKey==='feimao'){
+    var fmRoll = 1+Math.floor(Math.random()*6);
+    var fmBoost = !!data.milestone80PlayerId && data.milestone80PlayerId!==p.id;
+    if(fmRoll===1){
+      applyMovement(p, -2);
+      data.log = pushLog(data.log, p.name+' 踩到【肥猫】，掷出1点，倒退了2格（到达第'+p.position+'格）');
+    } else if(fmRoll<=3){
+      p.money += 20;
+      data.log = pushLog(data.log, p.name+' 踩到【肥猫】，掷出'+fmRoll+'点，获得20元');
+    } else if(fmRoll<=5){
+      p.money += 20;
+      p.hand.push(drawCard(data.round, fmBoost));
+      data.log = pushLog(data.log, p.name+' 踩到【肥猫】，掷出'+fmRoll+'点，获得20元和1张随机卡牌');
+    } else {
+      p.money += 30;
+      p.hand.push(drawCard(data.round, fmBoost));
+      data.log = pushLog(data.log, p.name+' 踩到【肥猫】，掷出6点，获得30元和1张随机卡牌');
+    }
+  } else if(effectKey==='foguangding'){
+    p.hand.push({uid:uid(), key:'wuxiang'});
+    data.log = pushLog(data.log, p.name+' 踩到【佛光顶】，获得一张【无相金身】');
+  } else if(effectKey==='bishuiyuntao'){
+    addBuff(p,'INFINITE_RANGE',0,1,'grid:bishuiyuntao','碧水云涛');
+    data.log = pushLog(data.log, p.name+' 踩到【碧水云涛】，直到下回合结束前，凌虚一指的奇袭距离不受限制');
+  } else if(effectKey==='daozhu'){
+    var dzCount = Math.min(2, p.hand.length);
+    for(var dzi=0;dzi<dzCount;dzi++){
+      p.hand.splice(Math.floor(Math.random()*p.hand.length),1);
+    }
+    data.log = pushLog(data.log, p.name+' 踩到【道主】，失去了'+dzCount+'张随机卡牌');
+  } else if(effectKey==='heicaishen'){
+    var hcsLost = Math.min(20, p.money);
+    p.money -= hcsLost;
+    data.log = pushLog(data.log, p.name+' 踩到【黑财神】，损失了'+hcsLost+'元');
+  } else if(effectKey==='fanlou'){
+    p.nextRollOverride = {min:-2, max:8};
+    data.log = pushLog(data.log, p.name+' 踩到【樊楼】，下一次掷骰子的点数范围变为 -2 到 8');
   }
 }
 
@@ -238,13 +298,16 @@ function tryQingxiTeamSave(data, attacker, target, attackName){
   return true;
 }
 
-/* 被奇袭时的防御，优先级从高到低：散财消灾 > 无相金身 > 青溪队友出面化解——
-   前两项都会在触发时消耗掉持有的那一张。散财消灾只有在目标金钱够20元时才
-   生效（改为扣20元，不会跳过回合）；金钱不够则这张卡视为没生效，继续往下看
-   无相金身能不能格挡；再往下如果还有组队模式下的青溪队友，看队友能不能出面
-   化解。返回 true 表示这次奇袭已经被防住了（日志已经写好，调用方不应该再
-   施加跳过回合等原本的效果）；返回 false 表示没有防御，调用方按原计划继续。 */
+/* 被奇袭时的防御，优先级从高到低：黑衣女子（完全没有防御机会）> 散财消灾 >
+   无相金身 > 青溪队友出面化解——中间两项都会在触发时消耗掉持有的那一张。
+   散财消灾只有在目标金钱够20元时才生效（改为扣20元，不会跳过回合）；金钱
+   不够则这张卡视为没生效，继续往下看无相金身能不能格挡；再往下如果还有
+   组队模式下的青溪队友，看队友能不能出面化解。返回 true 表示这次奇袭已经
+   被防住了（日志已经写好，调用方不应该再施加跳过回合等原本的效果）；
+   返回 false 表示没有防御，调用方按原计划继续。 */
 function checkSurpriseDefense(data, attacker, target, attackName){
+  var noDefense = target.buffs.some(function(b){ return b.type==='DEFENSE_DISABLED' && b.turnsLeft>0; });
+  if(noDefense) return false;
   var sIdx = findHandIndex(target,'sancai');
   if(sIdx>-1 && target.money>=20){
     target.hand.splice(sIdx,1);
@@ -322,11 +385,12 @@ function advanceTurnIndex(data){
     if(idx===0) wrapped = true;
     var pl = findPlayer(data, data.turnOrder[idx]);
     var skip=null;
-    for(var i=0;i<pl.buffs.length;i++){ if(pl.buffs[i].type==='SKIP_TURN' && pl.buffs[i].turnsLeft>0){ skip=pl.buffs[i]; break; } }
+    for(var i=0;i<pl.buffs.length;i++){ if((pl.buffs[i].type==='SKIP_TURN'||pl.buffs[i].type==='HARD_SKIP_TURN') && pl.buffs[i].turnsLeft>0){ skip=pl.buffs[i]; break; } }
     if(skip){
       skip.turnsLeft -= 1;
       pl.buffs = pl.buffs.filter(function(b){ return b.turnsLeft>0; });
-      data.log = pushLog(data.log, pl.name+' 处于奇袭效果中，跳过了这个回合');
+      var skipMsg = skip.type==='HARD_SKIP_TURN' ? (pl.name+' 处于【望月婵媛】效应中，跳过了这个回合') : (pl.name+' 处于奇袭效果中，跳过了这个回合');
+      data.log = pushLog(data.log, skipMsg);
       loops++;
       continue;
     }
@@ -435,6 +499,43 @@ export function mutStart(data, requesterId){
   applyTianquanStartingBonus(data);
   grantTurnStart(data, order[0]);
   data.log = pushLog(data.log, '游戏开始！骰子决定顺序，'+nameOf(data,order[0])+' 先手；本轮所有玩家已同时获得资源');
+  return {data:data};
+}
+
+/* 再来一局：游戏结束后，房主可以带着同一批人直接回到大厅重开一局，不用
+   所有人退出房间、重新创建/加入。玩家的 id/name/hero/team 保留下来——想跟
+   同一批人马上再打一局，不用重新选英雄，组队模式下也不用重新分队（房主
+   在大厅里当然还是可以重新分）；其余跟对局绑定的状态（金钱、手牌、位置、
+   buff、商店、冷却、回合顺序、棋盘特殊格、太平钟楼封禁、80%里程碑……）
+   全部清空重来，就跟一个全新房间进入大厅时一样。 */
+export function mutRestart(data, requesterId){
+  if(data.hostId!==requesterId) return {error:'只有房主可以开始下一局'};
+  if(data.status!=='finished') return {error:'当前对局还没结束，无法开始下一局'};
+  data.players.forEach(function(p){
+    p.money = 0;
+    p.position = 0;
+    p.hand = [];
+    p.buffs = [];
+    p.skillCooldown = 0;
+    p.storeOffer = genStoreOffer(0, false);
+    p.storeRefreshCount = 0;
+    p.cardsPlayedThisRound = [];
+    p.qingxiSavedCount = 0;
+    p.nextRollOverride = null;
+  });
+  data.status = 'lobby';
+  data.turnOrder = [];
+  data.turnIndex = 0;
+  data.turnState = {rolled:false, skillUsed:false, lastRoll:null};
+  data.round = 0;
+  data.gridEffects = {};
+  data.pendingGridChoice = null;
+  data.pendingDiscard = null;
+  data.milestone80PlayerId = null;
+  data.taipingBanFrom = null;
+  data.taipingBanUntil = null;
+  data.winner = null;
+  data.log = pushLog(data.log, '房主开始了新的一局，房间回到大厅');
   return {data:data};
 }
 
@@ -576,10 +677,22 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
   if(idx===-1) return {error:'卡牌不存在或已被使用'};
   var cardKey=p.hand[idx].key;
   var card=CARDS[cardKey];
+  /* 独夫：本回合无法使用任何卡牌——但清风霁月是解除这个效果本身的手段，
+     必须放行，否则这张debuff就永远解不掉了。 */
+  if(cardKey!=='qingfeng' && p.buffs.some(function(b){ return b.type==='CARD_LOCKED' && b.turnsLeft>0; })){
+    return {error:'独夫效应：本回合无法使用任何卡牌（清风霁月除外）'};
+  }
   if(card && card.passive) return {error:'该卡牌是被动效果，留在口袋里即可自动生效，无需主动使用'};
   if(card && card.surpriseAttack && isSurpriseAttackBanned(data)){
     return {error:'太平钟楼效应：这一轮奇袭类卡牌被禁止使用'};
   }
+  /* 打出的卡从手牌里拿掉，放在效果结算之前做——如果后面的效果分支还会
+     return {error:...}（比如没选目标），这个操作也会跟着整个 data 一起被
+     丢弃，不会真的写回去，所以提前做没有副作用；提前做的好处是像"道主"
+     这种会随机弃掉手牌的格子效果，结算时这张已经打出去的卡不会还留在
+     手牌数组里被"随机"到（不然它到底算不算数、下标会不会跟着错位，是一堆
+     麻烦事）。 */
+  p.hand.splice(idx,1);
   /* 卡牌的 price 是商店购买价，已经在口袋里的卡牌打出来不再收费 */
   if(cardKey==='qingfeng'){
     /* 单人混战模式没有队友，固定对自己生效；组队模式下可以选队友（帮TA解除减益） */
@@ -587,10 +700,9 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
     if(!tQF) return {error:'目标无效'};
     var qfSelf = tQF.id===p.id;
     var dIdx=-1;
-    /* 无相皇（SKILL_LOCKED）、千夜（STEP_PENALTY）都能被这张卡解除，找到哪个
-       算哪个（"解除自身一项减益"，不是全解）。 */
+    /* 找到第一个"可解除"的减益就解除哪个（"解除自身一项减益"，不是全解） */
     for(var j=0;j<tQF.buffs.length;j++){
-      if((tQF.buffs[j].type==='STEP_PENALTY' || tQF.buffs[j].type==='SKILL_LOCKED') && tQF.buffs[j].turnsLeft>0){ dIdx=j; break; }
+      if(isRemovableDebuff(tQF.buffs[j]) && tQF.buffs[j].turnsLeft>0){ dIdx=j; break; }
     }
     if(dIdx===-1) return {error:qfSelf?'当前没有可解除的减益':(tQF.name+' 当前没有可解除的减益')};
     var removed=tQF.buffs[dIdx];
@@ -615,8 +727,10 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
     if(!targetId) return {error:'请选择目标玩家'};
     var t=findPlayer(data,targetId);
     if(!isValidEnemyTarget(data,p,t)) return {error:'目标无效（组队模式下不能对队友使用这张卡）'};
-    /* 千里目：只要留在口袋里，自己发起的凌虚一指距离限制额外 +2 格 */
-    var lingxuRange = card.targetRange + (findHandIndex(p,'qianlimu')>-1 ? 2 : 0);
+    /* 千里目：只要留在口袋里，自己发起的凌虚一指距离限制额外 +2 格；
+       碧水云涛：直到下回合结束前，距离限制直接不生效 */
+    var hasInfiniteRange = p.buffs.some(function(b){ return b.type==='INFINITE_RANGE' && b.turnsLeft>0; });
+    var lingxuRange = hasInfiniteRange ? Infinity : (card.targetRange + (findHandIndex(p,'qianlimu')>-1 ? 2 : 0));
     if(Math.abs(t.position-p.position) > lingxuRange) return {error:'目标不在你当前位置前后'+lingxuRange+'格范围内'};
     if(hasActiveSkipTurn(t)) return {error:t.name+' 已经处于「即将跳过回合」的保护状态，要等TA的下一次回合结束后才能再被奇袭'};
     if(checkSurpriseDefense(data, p, t, '凌虚一指')){
@@ -706,10 +820,10 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
     /* 单人混战模式没有队友，固定对自己生效；组队模式下可以选队友（帮TA） */
     var tMSHC = resolveBuffTarget(data, p, targetId);
     if(!tMSHC) return {error:'目标无效'};
-    var hasDebuffMSHC = tMSHC.buffs.some(function(b){ return (b.type==='STEP_PENALTY'||b.type==='SKIP_TURN'||b.type==='SKILL_LOCKED') && b.turnsLeft>0; });
+    var hasDebuffMSHC = tMSHC.buffs.some(function(b){ return isRemovableDebuff(b) && b.turnsLeft>0; });
     var mshcSelf = tMSHC.id===p.id;
     if(hasDebuffMSHC){
-      tMSHC.buffs = tMSHC.buffs.filter(function(b){ return !((b.type==='STEP_PENALTY'||b.type==='SKIP_TURN'||b.type==='SKILL_LOCKED') && b.turnsLeft>0); });
+      tMSHC.buffs = tMSHC.buffs.filter(function(b){ return !(isRemovableDebuff(b) && b.turnsLeft>0); });
       addBuff(tMSHC,'STEP_BONUS',2,2,'card:miaoshouhuichun','妙手回春');
       data.log = pushLog(data.log, mshcSelf ? (p.name+' 使用【妙手回春】，清除了自己所有减益，并获得 +2 步增益（持续2回合）') : (p.name+' 对 '+tMSHC.name+' 使用【妙手回春】，清除了对方所有减益，并获得 +2 步增益（持续2回合）'));
     } else {
@@ -725,7 +839,6 @@ export function mutPlayCard(data, playerId, cardUid, targetId, payload){
   if(p.cardsPlayedThisRound && p.cardsPlayedThisRound.indexOf(cardKey)===-1){
     p.cardsPlayedThisRound.push(cardKey);
   }
-  p.hand.splice(idx,1);
   return {data:data};
 }
 
@@ -790,8 +903,8 @@ function performRoll(data, p, base, extraNotes){
     if(someoneElseDebuffed){ bonus+=3; notes.push('醉花阴被动：场上有人带减益，额外 +3 步'); }
   }
   if(findHandIndex(p,'haozhao')>-1){
-    /* 好兆骰：点数1-2 => +3，4-5 => +2，6 => +1，点数为3时无加成 */
-    var luckyBonus = base<3 ? 3 : (base>=4 && base<=5 ? 2 : (base===6 ? 1 : 0));
+    /* 好兆骰：点数1-3 => +3，4-5 => +2，6 => +1 */
+    var luckyBonus = base<=3 ? 3 : (base<=5 ? 2 : 1);
     if(luckyBonus>0){ bonus+=luckyBonus; notes.push('好兆骰：+'+luckyBonus+'步'); }
   }
   if(p.hero==='guyun'){
@@ -851,8 +964,17 @@ export function mutRoll(data, playerId){
   var blockMsg = pendingGridBlockError(data);
   if(blockMsg) return {error:blockMsg};
   var p=findPlayer(data,playerId);
-  var base = 1+Math.floor(Math.random()*6);
-  performRoll(data, p, base);
+  var base, overrideNotes;
+  if(p.nextRollOverride){
+    /* 樊楼：这一次掷骰子的点数范围被替换成 -2 到 8（用一次就消耗掉） */
+    var lo=p.nextRollOverride.min, hi=p.nextRollOverride.max;
+    base = lo + Math.floor(Math.random()*(hi-lo+1));
+    overrideNotes = ['樊楼效应：这次骰子的点数范围是 '+lo+' 到 '+hi];
+    p.nextRollOverride = null;
+  } else {
+    base = 1+Math.floor(Math.random()*6);
+  }
+  performRoll(data, p, base, overrideNotes);
   return {data:data};
 }
 

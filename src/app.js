@@ -6,7 +6,7 @@ import { findPlayer, newPlayer } from './game-logic.js';
 import {
   mutJoin, mutSetHero, mutKick, mutStart, mutUseSkill, mutPlayCard,
   mutBuyCard, mutSellCard, mutRefreshStore, mutRoll, mutEndTurn, hasActiveSkipTurn,
-  mutResolveGridChoice, mutResolveDiscard, mutSetTeam
+  mutResolveGridChoice, mutResolveDiscard, mutSetTeam, mutRestart
 } from './mutators.js';
 import { render } from './render.js';
 import { runtime, paramRoom } from './app-state.js';
@@ -186,10 +186,12 @@ app.addEventListener('click', function(e){
         opps=opps.filter(function(p){ return p.team!==me0.team; });
       }
       if(cdef.targetRange!=null){
-        /* 千里目：只要留在口袋里，自己发起的凌虚一指距离限制额外 +2 格——
-           这里跟 mutators.js 的 mutPlayCard 保持一致，否则持有千里目的玩家会在
-           客户端这一步就被过滤掉本该能选的目标，看不到选项 */
-        var effRange = cdef.targetRange + (me0.hand.some(function(c){ return c.key==='qianlimu'; }) ? 2 : 0);
+        /* 千里目：只要留在口袋里，自己发起的凌虚一指距离限制额外 +2 格；
+           碧水云涛：距离限制直接不生效——这里跟 mutators.js 的 mutPlayCard
+           保持一致，否则持有千里目/碧水云涛的玩家会在客户端这一步就被过滤掉
+           本该能选的目标，看不到选项 */
+        var hasInfiniteRangeUI = me0.buffs && me0.buffs.some(function(b){ return b.type==='INFINITE_RANGE' && b.turnsLeft>0; });
+        var effRange = hasInfiniteRangeUI ? Infinity : (cdef.targetRange + (me0.hand.some(function(c){ return c.key==='qianlimu'; }) ? 2 : 0));
         opps=opps.filter(function(p){ return Math.abs(p.position-me0.position)<=effRange; });
       }
       if(cdef.surpriseAttack){
@@ -298,6 +300,10 @@ app.addEventListener('click', function(e){
     return;
   }
   if(action==='back-home-finished'){ leaveRoom(); return; }
+  if(action==='restart-game'){
+    runAction(function(){ return withGameLock(myRoom, function(data){ return mutRestart(data,myId); }); });
+    return;
+  }
 });
 
 app.addEventListener('focus', function(e){

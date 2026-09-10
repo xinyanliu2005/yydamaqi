@@ -79,7 +79,7 @@ export var CARDS = {
     desc:'被动：只要留在口袋里，就能抵御一次「奇袭」类卡牌（如凌虚一指）——被奇袭时自动消耗掉，本次奇袭完全无效',
     needsTarget:false, passive:true },
   haozhao:  { key:'haozhao', name:'好兆骰', price:30,
-    desc:'被动：只要留在口袋里，掷骰点数为1-2时额外+3步，4-5时额外+2步，6时额外+1步（点数为3时无加成）',
+    desc:'被动：只要留在口袋里，掷骰点数为1-3时额外+3步，4-5时额外+2步，6时额外+1步',
     needsTarget:false, passive:true },
 
   /* “奇袭”类：可以被 无相金身 格挡 */
@@ -167,7 +167,25 @@ export var GRID_EFFECT_DEFS = {
   zhulinxiaowu: { name:'竹林小屋', short:'竹',
     desc:'接下来2回合 +3 步' },
   buxianxian: { name:'不羡仙', short:'仙',
-    desc:'清除自身当前所有减益' }
+    desc:'清除自身当前所有减益' },
+  dufu: { name:'独夫', short:'夫',
+    desc:'下一回合无法使用任何卡牌（可被「清风霁月」解除）' },
+  heiyinvzi: { name:'黑衣女子', short:'衣',
+    desc:'接下来2回合，无法防御任何奇袭（无相金身/散财消灾/队友化解都不生效），无法被任何效果解除' },
+  wangyuechanyuan: { name:'望月婵媛', short:'婵',
+    desc:'立即掷一次骰子，点数1-2则跳过下一个回合（无法被任何效果解除）' },
+  feimao: { name:'肥猫', short:'猫',
+    desc:'立即掷一次骰子：1点倒退2格；2-3点获得20元；4-5点获得20元和1张随机卡牌；6点获得30元和1张随机卡牌' },
+  foguangding: { name:'佛光顶', short:'佛',
+    desc:'立即获得一张【无相金身】' },
+  bishuiyuntao: { name:'碧水云涛', short:'涛',
+    desc:'直到下回合结束前，自己发起的凌虚一指奇袭距离不受限制' },
+  daozhu: { name:'道主', short:'主',
+    desc:'失去2张随机手牌' },
+  heicaishen: { name:'黑财神', short:'财',
+    desc:'损失20元' },
+  fanlou: { name:'樊楼', short:'樊',
+    desc:'下一次掷骰子的点数范围变为 -2 到 8（不是正常的1-6）' }
 };
 export var GRID_EFFECT_KEYS = Object.keys(GRID_EFFECT_DEFS);
 

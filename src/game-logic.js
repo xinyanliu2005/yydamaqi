@@ -72,6 +72,7 @@ export function newPlayer(id,name,hero){
     cardsPlayedThisRound:[], /* 墨山道被动用：这一轮打出过的不同卡牌种类，每轮开始重置 */
     team:null, /* 只在组队模式（2v2）下有意义：'A' 或 'B'，大厅里由房主分配 */
     qingxiSavedCount:0, /* 青溪被动用：这一轮里，队友已经替自己化解过几次奇袭（决定下一次代价翻几倍），每轮开始重置 */
+    nextRollOverride:null, /* 樊楼格子用：{min,max}，覆盖下一次掷骰子的点数范围，用一次就消耗掉 */
     joinedAt:Date.now()
   };
 }

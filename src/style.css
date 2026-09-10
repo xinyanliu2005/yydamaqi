@@ -223,6 +223,7 @@ details.rules b{ color:var(--ivory); }
 .winner-box{ text-align:center; background:var(--panel-solid); border:1px solid var(--gold); border-radius:16px; padding:36px 30px; box-shadow:var(--shadow); }
 .winner-box .wtitle{ font-family:'Ma Shan Zheng',cursive; font-size:2.4rem; color:var(--gold); }
 .winner-box .wname{ font-size:1.2rem; margin:8px 0 20px; }
+.winner-box .wactions{ display:flex; flex-direction:column; gap:10px; align-items:stretch; }
 
 .section-title{ font-size:.72rem; letter-spacing:.15em; text-transform:uppercase; color:var(--ivory-dim); margin:2px 0 2px; }
 .footnote{ font-size:.68rem; color:var(--ivory-dim); opacity:.75; margin-top:10px; line-height:1.6; }

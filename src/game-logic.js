@@ -82,15 +82,46 @@ export function newPlayer(id,name,hero,mode){
   };
 }
 
+/* 每一轮发放的基础金钱/卡牌数量，按轮数分阶梯——不是每轮都一样多：
+   第1轮30元2张，第2-3轮回落到20元1张，第4轮回到30元2张，第5轮起固定
+   45元2张。 */
+function roundResourceAmounts(round){
+  if(round===1) return {money:30, cards:2};
+  if(round===2 || round===3) return {money:20, cards:1};
+  if(round===4) return {money:30, cards:2};
+  return {money:45, cards:2}; /* 第5轮起 */
+}
+
+/* 组队模式（2v2）的"落后追赶奖励"：每一轮重新判定一次（不是像80%里程碑那样
+   一旦触发就永久生效）——如果一个队伍的两名玩家都落后于对方队伍里跑得最远
+   的那个人超过20格，这个队伍这一轮额外获得45元和2张卡牌。用"两人都"而不是
+   "任意一人"，是因为只要队里还有一个人跟得上，就不算真正被甩开。 */
+function isTeamLeftBehind(data, team){
+  if(data.mode!=='2v2' || !team) return false;
+  var teamPlayers = data.players.filter(function(p){ return p.team===team; });
+  var otherPlayers = data.players.filter(function(p){ return p.team && p.team!==team; });
+  if(teamPlayers.length===0 || otherPlayers.length===0) return false;
+  var otherLeaderPos = Math.max.apply(null, otherPlayers.map(function(p){ return p.position; }));
+  return teamPlayers.every(function(p){ return (otherLeaderPos - p.position) > 20; });
+}
+
 /* 每一"轮"（round）开始时，场上所有玩家同时获得的资源——不是等到某个人的回合才发，
    而是这一轮刚开始（游戏开局，或上一轮所有人都走完一遍）就一次性发给每个人。 */
 export function grantRoundResources(data, playerId){
   var p=findPlayer(data,playerId);
   if(!p) return;
-  p.money += 30;
+  var amounts = roundResourceAmounts(data.round);
+  var money = amounts.money, cardCount = amounts.cards;
+  if(isTeamLeftBehind(data, p.team)){
+    money += 45;
+    cardCount += 2;
+    data.log = pushLog(data.log, p.name+' 所在的 '+p.team+' 队落后对方队伍超过20格，这一轮额外获得45元和2张卡牌（落后追赶奖励）');
+  }
+  p.money += money;
   var milestoneBoost = !!data.milestone80PlayerId && data.milestone80PlayerId!==playerId;
-  p.hand.push(drawCard(data.round, milestoneBoost, data.mode));
-  p.hand.push(drawCard(data.round, milestoneBoost, data.mode));
+  for(var ci=0; ci<cardCount; ci++){
+    p.hand.push(drawCard(data.round, milestoneBoost, data.mode));
+  }
   p.cardsPlayedThisRound = []; /* 新的一轮开始，墨山道被动的计数清零重新算 */
   p.qingxiSavedCount = 0; /* 新的一轮开始，青溪被动的翻倍计数也清零重新算 */
 }

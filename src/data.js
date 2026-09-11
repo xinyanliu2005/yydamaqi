@@ -246,17 +246,19 @@ export var STORE_WEIGHTS_EARLY = { /* 第1-2轮：新手卡 + 被动卡常见，
   tuonidaishui:0, cunbunanxing:0, /* 针对"当前第一名"的干扰卡，早期没有明显领先者，跟其他干扰卡一样第3轮才出现 */
   haoyunshai:8, zhuibuling:8 /* 跟其他30元被动卡（好兆骰/飒沓流星/聚宝盆）一样，早期常见 */
 };
-export var STORE_WEIGHTS_MID = { /* 第3轮起：干扰/进攻类卡牌成为主流 */
+export var STORE_WEIGHTS_MID = { /* 第3轮起：干扰/进攻类卡牌成为主流，但基础卡/被动卡也没有变得
+   罕见——两档权重从8:2（约7.3% : 1.8%，四倍差距）改成8:7（约4.9% : 4.2%，1vN模式下），
+   差距明显缩小了很多。 */
   lingxu:8, lingyun:8, daodao:8, shexing:8, liangshang:8,
   qianlimu:8, yizhiqianjin:8, pofuchenzhou:8,
-  yinyang:2, shengcai:2, qingfeng:2, jinyu:2,
-  wuxiang:2, haozhao:2, sadaliuxing:2, jubaopen:2, sancai:2,
+  yinyang:7, shengcai:7, qingfeng:7, jinyu:7,
+  wuxiang:7, haozhao:7, sadaliuxing:7, jubaopen:7, sancai:7,
   shihou:0, qiaoshan:0,
   miaoshouhuichun:0,
-  youqianrenxing:2, paiyoujienan:2,
+  youqianrenxing:7, paiyoujienan:7,
   houfazhiren:8,
   tuonidaishui:8, cunbunanxing:8,
-  haoyunshai:2, zhuibuling:2
+  haoyunshai:7, zhuibuling:7
 };
 /* 达成80%里程碑后，"非率先冲刺者"抽卡时额外叠加的权重——奇袭类卡牌变得更常见，
    给落后的玩家更多反打领先者的机会。 */
